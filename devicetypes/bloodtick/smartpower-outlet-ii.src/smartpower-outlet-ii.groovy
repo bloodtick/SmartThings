@@ -16,25 +16,25 @@
 metadata {
 	// Automatically generated. Make future change here.
 	definition(name: "SmartPower Outlet II", namespace: "bloodtick", author: "SmartThings", mnmn: "SmartThings", vid: "generic-switch-power", ocfDeviceType: "oic.d.smartplug", runLocally: true, minHubCoreVersion: '000.017.0012', executeCommandsLocally: true) {
-		capability "Actuator"
-		capability "Switch"
-		capability "Power Meter"
-		capability "Configuration"
-		capability "Refresh"
-		capability "Sensor"
-		capability "Health Check"
-		capability "Outlet"
+        capability "Actuator"
+        capability "Switch"
+        capability "Power Meter"
+        capability "Configuration"
+        capability "Refresh"
+        capability "Sensor"
+        capability "Health Check"
+        capability "Outlet"
         capability "Contact Sensor"
 
-		fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0006,0B04,0B05", outClusters: "0019", manufacturer: "CentraLite", model: "3200", deviceJoinName: "Outlet"
-		fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0006,0B04,0B05", outClusters: "0019", manufacturer: "CentraLite", model: "3200-Sgb", deviceJoinName: "Outlet"
-		fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0006,0B04,0B05", outClusters: "0019", manufacturer: "CentraLite", model: "4257050-RZHAC", deviceJoinName: "Outlet"
-		fingerprint profileId: "0104", inClusters: "0000, 0003, 0004, 0005, 0006, 000F, 0B04", outClusters: "0019", manufacturer: "SmartThings", model: "outletv4", deviceJoinName: "Outlet"
-		fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0006,0B04,0B05", outClusters: "0019"
-		fingerprint profileId: "0104", inClusters: "0000,0003,0006,0009,0B04", outClusters: "0019", manufacturer: "Samjin", model: "outlet", deviceJoinName: "Outlet"
-		fingerprint profileId: "0010", inClusters: "0000 0003 0004 0005 0006 0008 0702 0B05", outClusters: "0019", manufacturer: "innr", model: "SP 120", deviceJoinName: "Innr Smart Plug EU"
-		fingerprint profileId: "0104", inClusters: "0000,0002,0003,0004,0005,0006,0009,0B04,0702", outClusters: "0019,000A,0003,0406", manufacturer: "Aurora", model: "SmartPlug51AU", deviceJoinName: "Aurora SmartPlug"
-		fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0006,0702,0B04,0B05,FC03", outClusters: "0019", manufacturer: "CentraLite", model: "3210-L", deviceJoinName: "Iris Smart Plug"
+        fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0006,0B04,0B05", outClusters: "0019", manufacturer: "CentraLite", model: "3200", deviceJoinName: "Outlet"
+        fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0006,0B04,0B05", outClusters: "0019", manufacturer: "CentraLite", model: "3200-Sgb", deviceJoinName: "Outlet"
+        fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0006,0B04,0B05", outClusters: "0019", manufacturer: "CentraLite", model: "4257050-RZHAC", deviceJoinName: "Outlet"
+        fingerprint profileId: "0104", inClusters: "0000, 0003, 0004, 0005, 0006, 000F, 0B04", outClusters: "0019", manufacturer: "SmartThings", model: "outletv4", deviceJoinName: "Outlet"
+        fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0006,0B04,0B05", outClusters: "0019"
+        fingerprint profileId: "0104", inClusters: "0000,0003,0006,0009,0B04", outClusters: "0019", manufacturer: "Samjin", model: "outlet", deviceJoinName: "Outlet"
+        fingerprint profileId: "0010", inClusters: "0000 0003 0004 0005 0006 0008 0702 0B05", outClusters: "0019", manufacturer: "innr", model: "SP 120", deviceJoinName: "Innr Smart Plug EU"
+        fingerprint profileId: "0104", inClusters: "0000,0002,0003,0004,0005,0006,0009,0B04,0702", outClusters: "0019,000A,0003,0406", manufacturer: "Aurora", model: "SmartPlug51AU", deviceJoinName: "Aurora SmartPlug"
+        fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0006,0702,0B04,0B05,FC03", outClusters: "0019", manufacturer: "CentraLite", model: "3210-L", deviceJoinName: "Iris Smart Plug"
 	}
 
 	// simulator metadata
@@ -55,8 +55,8 @@ metadata {
 					"http://cdn.device-gse.smartthings.com/Outlet/US/OutletUS2.jpg"
 			])
 		}
-        input(name:"roundPower", type: "bool", title: "Round Power(W) Meter Values", description: "", defaultValue: "true", displayDuringSetup: false)
-		input(name:"logPower", type: "bool", title: "Log Power(W) Meter Events", description: "", defaultValue: "false", displayDuringSetup: false)
+        input(name:"logPower", type: "bool", title: "Log Power(W) Meter Events", description: "", defaultValue: "false", displayDuringSetup: false)
+        input(name:"roundPower", type: "number", title: "Round Power(W) Meter Values by:", description: "0=decimal, 1-10=mod round to value", range: "0..10", defaultValue: 1, displayDuringSetup: false)
         input(name:"contactLo", type: "decimal", title: "Contact Open when Power(W) under:", description: "", range: "0.0..*", defaultValue: 0.0, displayDuringSetup: false)
         input(name:"contactHi", type: "decimal", title: "Contact Closed when Power(W) over:", description: "", range: "0.1..*", defaultValue: 0.1, displayDuringSetup: false)
 	}
@@ -75,14 +75,14 @@ metadata {
 			}
 		}
 
-		standardTile("refresh", "device.power", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
-			state "default", label: '', action: "refresh.refresh", icon: "st.secondary.refresh"
-		}
-        
+        standardTile("refresh", "device.power", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
+            state "default", label: '', action: "refresh.refresh", icon: "st.secondary.refresh"
+        }
+
         standardTile("contact", "device.contact", inactiveLabel: true, width: 2, height: 2) {
-			state("closed", label:'${name}', icon:"st.contact.contact.closed", backgroundColor:"#79b821")
-			state("open", label:'${name}', icon:"st.contact.contact.open", backgroundColor:"#CCCCCC")
-		}
+            state("closed", label:'${name}', icon:"st.contact.contact.closed", backgroundColor:"#79b821")
+            state("open", label:'${name}', icon:"st.contact.contact.open", backgroundColor:"#CCCCCC")
+        }
 
 		main "switch"
 		details(["switch", "refresh", "contact"])
@@ -91,18 +91,18 @@ metadata {
 
 def installed() {
     settings.logPower = false
-    settings.roundPower = true
+    settings.roundPower = 1
     settings.contactHi = 0.1
     settings.contactLo = 0.0
-	initialize()
+    initialize()
 }
 
 def updated() {
-	initialize()
+    initialize()
 }
 
 def initialize() {
-	if(settings.contactLo>=settings.contactHi)
+    if(settings.contactLo>=settings.contactHi)
     	settings.contactHi = settings.contactLo + 0.1
     log.debug "Executing 'initialize()' with new preferences: ${settings}"    
 }
@@ -115,7 +115,7 @@ def parse(String description) {
 
 	if (event) {
 		if (event.name == "power") {
-			def value = settings.roundPower ? Math.round((event.value as Integer) / 10) : ((event.value as Integer) / 10)
+			def value = settings.roundPower!=0 ? (Math.round((event.value as Integer) / (10*settings.roundPower)) * settings.roundPower) : ((event.value as Integer) / 10)
 			event = contactSensor( value)
 		} else if (event.name == "switch") {
 			event = createEvent(name: event.name, value: event.value )
@@ -168,8 +168,8 @@ def configure() {
 
 def contactSensor( power ) {
 
-	def event
-	if(device.currentValue("switch")=="off") power = 0
+    def event
+    if(device.currentValue("switch")=="off") power = 0
 
     if (settings.logPower)
     	event = createEvent(name: "power", value: power, descriptionText: "Power is ${power} Watts")
@@ -180,6 +180,6 @@ def contactSensor( power ) {
     	sendEvent(name: "contact", value: "closed", descriptionText: "Contact is closed: ${power} Watts")
     else if (settings.contactLo>=power)
         sendEvent(name: "contact", value: "open", descriptionText: "Contact is open: ${power} Watts")
-        
+
     return event
 }
