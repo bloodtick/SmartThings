@@ -85,7 +85,7 @@ metadata {
         }
 
 		main "switch"
-		details(["switch", "refresh", "contact"])
+		details(["switch", "contact", "refresh"])
 	}
 }
 
