@@ -34,10 +34,11 @@ metadata {
     
     attribute "deviceInfo", "string"
     attribute "deviceSettings", "string"
-    attribute "wifiSignalLevel", "string"
+    attribute "wifiSignalLevel", "number"
     attribute "speechVolume", "number"
     attribute "screen", "string"
     attribute "screenSaver", "string"
+    attribute "currentPage", "string"
     
     command "screenOn"
     command "screenOff"
@@ -542,9 +543,10 @@ private def update() {
         log.debug "Screen Saver Timeout is: ${state.listSettings.timeToScreensaverV2}"
         log.debug "Screen Saver Brightness is: ${state.listSettings.screensaverBrightness}"
 
-        sendEvent(name: "deviceSettings", value: String.valueOf(state.listSettings), displayed: false)
-        sendEvent(name: "deviceInfo", value: String.valueOf(state.deviceInfo), displayed: false) 
+        sendEvent(name: "deviceSettings", value: (new JsonBuilder(state.listSettings)).toPrettyString(), displayed: false)
+        sendEvent(name: "deviceInfo", value: (new JsonBuilder(state.deviceInfo)).toPrettyString(), displayed: false)
         
+        sendEvent(name: "currentPage", value: "${state.deviceInfo.currentPage}", displayed: false)
         sendEvent(name: "screenBrightness", value: "${state.deviceInfo.screenBrightness}", displayed: false)
         sendEvent(name: "battery", value: "${state.deviceInfo.batteryLevel}", displayed: false)
         sendEvent(name: "appVersionName", value: "${state.deviceInfo.appVersionName}", displayed: false)
