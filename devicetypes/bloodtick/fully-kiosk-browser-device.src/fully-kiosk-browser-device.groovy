@@ -140,7 +140,7 @@ preferences {
     input(name:"devicePollRateSecs", type: "number", title: "Device Poll Rate (30-300 seconds)", description: "Default is 300 seconds", range: "30..300", defaultValue: "300", displayDuringSetup: false)
     input(name:"deviceMAC", type:"string", title:"MAC Address of Device", defaultValue: "Awaiting Device Response", required: false, displayDuringSetup: false)
     input(name:"deviceShowDeviceInfo", type: "bool", title: "Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
-    input(name:"devicePiston", type:"string", title: "WebCoRE External URL REST\n(Requires Fully JavaScript is Enabled)", description: "Optional JavaScript status event", defaultValue: "", required: false, displayDuringSetup: false)
+    input(name:"devicePiston", type:"string", title: "WebCoRE External URL\n(Requires Fully JavaScript set to enabled)", description: "Optional JavaScript status event", defaultValue: "", required: false, displayDuringSetup: false)
 }
 
 def installed() {
@@ -289,11 +289,11 @@ def sendGenericCommand(value) {
 }
 
 def injectJavaScriptCode() {
-    
+
     def hubaddress = device.hub.getDataValue("localIP") + ":" + device.hub.getDataValue("localSrvPortTCP")
     def myInjectJsCode = ""
 
-	// Todo: Unknown if this will ever work. If so, don't need an application running like webCoRE
+    // Todo: Unknown if this will ever work. If so, don't need an application running like webCoRE
     //def sendit = "fully.sendHexDataToTcpPort('onScreensaverStop', '192.168.1.103', 39500);"
     //myInjectJsCode = "function myA() {${sendit}}; fully.bind('onScreensaverStop','myA();');"
 
@@ -302,18 +302,18 @@ def injectJavaScriptCode() {
 
     if (settings.devicePiston && settings.devicePiston.contains('http') ) {
         def piston = settings.devicePiston
-        def mySend = "function mySend(value) {var xhr = new XMLHttpRequest(); xhr.open('POST','${piston}?mac='+fully.getMacAddress()+'&ip4='+fully.getIp4Address()+'&cmd='+value,true); xhr.send();};"
+        def mySend = "function mySend(value) {var xhr = new XMLHttpRequest(); xhr.open('GET','${piston}?mac='+fully.getMacAddress()+'&ip4='+fully.getIp4Address()+'&cmd='+value,true); xhr.send();};"
         def myCmd1 = "fully.bind('onScreensaverStop',\"mySend('onScreensaverStop');\"); fully.bind('onScreensaverStart',\"mySend('onScreensaverStart');\");"
-        def myCmd2 = "fully.bind('screenOn',\"mySend('screenOn');\"); fully.bind('screenOff',\"mySend('screenOff');\");"
-        def myCmd3 = "fully.bind('unplugged',\"mySend('unplugged');\"); fully.bind('pluggedAC',\"mySend('pluggedAC');\"); fully.bind('internetReconnect',\"mySend('internetReconnect');\");"
-        //myCmd3 = myCmd3 + " fully.bind('onMotion',\"mySend('onMotion');\");" // was a little noisy. shut off until need a reason.
+        myCmd1 += " fully.bind('screenOn',\"mySend('screenOn');\"); fully.bind('screenOff',\"mySend('screenOff');\");"
+        myCmd1 += " fully.bind('unplugged',\"mySend('unplugged');\"); fully.bind('pluggedAC',\"mySend('pluggedAC');\"); fully.bind('internetReconnect',\"mySend('internetReconnect');\");"
+        myCmd1 += " fully.bind('onMotion',\"mySend('onMotion');\");" // was a little noisy. seems like motion didnt trigger On all the time.
         // hashchange&popstate&load but all didn't work. so just old school polling again.
- 		def myCmd4 = "var loc=''; setInterval(function() {if(location.href!=loc) {mySend('onUrlChange'); loc=location.href;}},1000);"
-        myInjectJsCode = "${mySend} ${myCmd1} ${myCmd2} ${myCmd3} ${myCmd4}"
+        def myCmd2 = "var loc=''; setInterval(function() {if(location.href!=loc) {mySend('onUrlChange'); loc=location.href;}},1000);"
+        myInjectJsCode = "${mySend} ${myCmd1} ${myCmd2}"
     }
 
     if (device.currentValue("injectJsCode") != myInjectJsCode) {
-    	log.debug "Executing 'injectJavaScriptCode()' on hub: ${hubaddress}"
+        log.debug "Executing 'injectJavaScriptCode()' on hub: ${hubaddress}"
         setStringSetting( "injectJsCode", myInjectJsCode )
         loadStartURL() // Need to reload webpage to update JavaScript
     }
