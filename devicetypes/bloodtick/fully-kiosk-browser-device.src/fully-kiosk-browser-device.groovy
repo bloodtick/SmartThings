@@ -57,6 +57,8 @@ metadata {
         command "setScreensaverTimeout", ["number"]
         command "setStringSetting", ["string", "string"]
         command "setBooleanSetting", ["string", "string"]
+        command "getStringSetting", ["string", "string"]
+        command "getBooleanSetting", ["string", "string"]
         command "sendGenericCommand", ["string"]
         command "speachTestAction"
         command "speechVolumeUpdate"
@@ -294,7 +296,7 @@ def injectJavaScriptCode() {
     def myInjectJsCode = ""
 
     // Todo: Unknown if this will ever work. If so, don't need an application running like webCoRE
-    //def sendit = "fully.sendHexDataToTcpPort('onScreensaverStop', '192.168.1.103', 39500);"
+    //def sendit = "fully.sendHexDataToTcpPort('0x35 0x00 0x55', '192.168.1.103', 39500);"
     //myInjectJsCode = "function myA() {${sendit}}; fully.bind('onScreensaverStop','myA();');"
 
     // simple orginal test. just left here for reference.
@@ -306,7 +308,9 @@ def injectJavaScriptCode() {
         def myCmd1 = "fully.bind('onScreensaverStop',\"mySend('onScreensaverStop');\"); fully.bind('onScreensaverStart',\"mySend('onScreensaverStart');\");"
         myCmd1 += " fully.bind('screenOn',\"mySend('screenOn');\"); fully.bind('screenOff',\"mySend('screenOff');\");"
         myCmd1 += " fully.bind('unplugged',\"mySend('unplugged');\"); fully.bind('pluggedAC',\"mySend('pluggedAC');\"); fully.bind('internetReconnect',\"mySend('internetReconnect');\");"
-        myCmd1 += " fully.bind('onMotion',\"mySend('onMotion');\");" // was a little noisy. seems like motion didnt trigger On all the time.
+        if (state.listSettings && state.listSettings.motionDetection) {
+            myCmd1 += " fully.bind('onMotion',\"mySend('onMotion');\");" // was a little noisy. seems like motion didnt trigger On all the time.
+        }
         // hashchange&popstate&load but all didn't work. so just old school polling again.
         def myCmd2 = "var loc=''; setInterval(function() {if(location.href!=loc) {mySend('onUrlChange'); loc=location.href;}},1000);"
         myInjectJsCode = "${mySend} ${myCmd1} ${myCmd2}"
@@ -314,6 +318,7 @@ def injectJavaScriptCode() {
 
     if (device.currentValue("injectJsCode") != myInjectJsCode) {
         log.debug "Executing 'injectJavaScriptCode()' on hub: ${hubaddress}"
+        setBooleanSetting( "websiteIntegration", "true" )
         setStringSetting( "injectJsCode", myInjectJsCode )
         loadStartURL() // Need to reload webpage to update JavaScript
     }
@@ -329,6 +334,20 @@ def setBooleanSetting(String key, String value) {
     def cmd = "?type=json&password=${devicePassword}&cmd=setBooleanSetting&key=${key}&value=${URLEncoder.encode(value, "UTF-8")}"
     addEvent(["setBooleanSetting", key, value, cmd])
     fetchSettings()
+}
+
+def getStringSetting(String key, String obj = 'listSettings') {
+    if (state.get(obj)!=null && state.get(obj).get(key)!=null) {
+        return state.get(obj).get(key)
+    }
+    return null
+}
+
+def getBooleanSetting(String key, String obj = 'listSettings') {
+    if (state.get(obj)!=null && state.get(obj).get(key)!=null) {
+        return state.get(obj).get(key)
+    }
+    return null
 }
 
 def refresh() {
@@ -588,11 +607,11 @@ def update() {
             	sendEvent(name: "switch", value: "off", descriptionText: "Fully Kiosk is off")            
         }
 
-        log.debug "Brightness is: ${state.deviceInfo.screenBrightness}"
+        log.debug "Brightness is: ${state.deviceInfo.screenBrightness} (${state.deviceInfo.screenBrightness.toInteger()*100/255}%)"
         log.debug "Screen On: ${state.deviceInfo.isScreenOn}"
         log.debug "Display is: ${state.deviceInfo.currentFragment}"
-        log.debug "Screen Saver Timeout is: ${state.listSettings.timeToScreensaverV2}"
-        log.debug "Screen Saver Brightness is: ${state.listSettings.screensaverBrightness}"
+        log.debug "Screen Saver Timeout is: ${state.listSettings.timeToScreensaverV2} secs"
+        log.debug "Screen Saver Brightness is: ${state.listSettings.screensaverBrightness} (${state.listSettings.screensaverBrightness.toInteger()*100/255}%)"
 
         sendEvent(name: "deviceSettings", value: (settings.deviceShowDeviceInfo?(new JsonBuilder(state.listSettings)).toPrettyString():"disabled"), displayed: false)
         sendEvent(name: "deviceInfo", value: (settings.deviceShowDeviceInfo?(new JsonBuilder(state.deviceInfo)).toPrettyString():"disabled"), displayed: false)
