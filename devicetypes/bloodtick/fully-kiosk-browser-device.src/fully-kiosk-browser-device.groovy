@@ -141,7 +141,7 @@ preferences {
     input(name:"deviceAllowScreenOff", type: "bool", title: "Allow Screen Off Command", description: "Diverts screen off and on commands to screensaver on and off commands", defaultValue: "false", displayDuringSetup: false)
     input(name:"devicePollRateSecs", type: "number", title: "Device Poll Rate (30-300 seconds)", description: "Default is 300 seconds", range: "30..300", defaultValue: "300", displayDuringSetup: false)
     input(name:"deviceMAC", type:"string", title:"MAC Address of Device", defaultValue: "Awaiting Device Response", required: false, displayDuringSetup: false)
-    input(name:"deviceShowDeviceInfo", type: "bool", title: "Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
+    input(name:"deviceStoreDeviceConfig", type: "bool", title: "Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
     input(name:"devicePiston", type:"string", title: "WebCoRE External URL\n(Requires Fully JavaScript set to enabled)", description: "Optional JavaScript status event", defaultValue: "", required: false, displayDuringSetup: false)
 }
 
@@ -151,7 +151,7 @@ def installed() {
     settings.deviceAllowScreenOff = false
     settings.devicePollRateSecs = 300
     settings.deviceMAC = "Awaiting Device Response"
-    settings.deviceShowDeviceInfo = false
+    settings.deviceStoreDeviceConfig = false
     settings.devicePiston = ""
     log.debug "Executing 'installed()' with settings: ${settings}"
     initialize()
@@ -225,7 +225,6 @@ def fetchSettings() {
 def fetchInfo() {
     def cmd = "?type=json&password=${devicePassword}&cmd=deviceInfo"
     addEvent(["deviceInfo", null, null, cmd])
-    injectJavaScriptCode() // not sure if this belongs here. leaving it for now. 
 }
 
 def screenOn() {
@@ -309,7 +308,7 @@ def injectJavaScriptCode() {
         myCmd1 += " fully.bind('screenOn',\"mySend('screenOn');\"); fully.bind('screenOff',\"mySend('screenOff');\");"
         myCmd1 += " fully.bind('unplugged',\"mySend('unplugged');\"); fully.bind('pluggedAC',\"mySend('pluggedAC');\"); fully.bind('internetReconnect',\"mySend('internetReconnect');\");"
         if (state.listSettings && state.listSettings.motionDetection) {
-            myCmd1 += " fully.bind('onMotion',\"mySend('onMotion');\");" // was a little noisy. seems like motion didnt trigger On all the time.
+            //myCmd1 += " fully.bind('onMotion',\"mySend('onMotion');\");" // was a little noisy. seems like motion didnt trigger On all the time.
         }
         // hashchange&popstate&load but all didn't work. so just old school polling again.
         def myCmd2 = "var loc=''; setInterval(function() {if(location.href!=loc) {mySend('onUrlChange'); loc=location.href;}},1000);"
@@ -318,9 +317,10 @@ def injectJavaScriptCode() {
 
     if (device.currentValue("injectJsCode") != myInjectJsCode) {
         log.debug "Executing 'injectJavaScriptCode()' on hub: ${hubaddress}"
-        setBooleanSetting( "websiteIntegration", "true" )
+        if ( state.listSettings && !state.listSettings.websiteIntegration )
+        	setBooleanSetting( "websiteIntegration", "true" )
         setStringSetting( "injectJsCode", myInjectJsCode )
-        loadStartURL() // Need to reload webpage to update JavaScript
+        loadURL( state.deviceInfo.currentPage ) // Need to reload webpage to update JavaScript
     }
 }
 
@@ -593,7 +593,7 @@ def update() {
         if (state.deviceInfo.isScreenOn && state.deviceInfo.currentFragment!="screensaver") {
 
             if (device.currentValue("switch") != "on")
-            	sendEvent(name: "switch", value: "on", descriptionText: "Fully Kiosk is on")
+            	sendEvent(name: "switch", value: "on", descriptionText: "Fully Kiosk Browser is on")
 
             def level = Math.round(state.deviceInfo.screenBrightness.toInteger()/2.55)
             if (device.currentValue("level") != "${level}")
@@ -604,7 +604,7 @@ def update() {
         }
         else {
             if (device.currentValue("switch") != "off")
-            	sendEvent(name: "switch", value: "off", descriptionText: "Fully Kiosk is off")            
+            	sendEvent(name: "switch", value: "off", descriptionText: "Fully Kiosk Browser is off")            
         }
 
         log.debug "Brightness is: ${state.deviceInfo.screenBrightness} (${state.deviceInfo.screenBrightness.toInteger()*100/255}%)"
@@ -613,8 +613,8 @@ def update() {
         log.debug "Screen Saver Timeout is: ${state.listSettings.timeToScreensaverV2} secs"
         log.debug "Screen Saver Brightness is: ${state.listSettings.screensaverBrightness} (${state.listSettings.screensaverBrightness.toInteger()*100/255}%)"
 
-        sendEvent(name: "deviceSettings", value: (settings.deviceShowDeviceInfo?(new JsonBuilder(state.listSettings)).toPrettyString():"disabled"), displayed: false)
-        sendEvent(name: "deviceInfo", value: (settings.deviceShowDeviceInfo?(new JsonBuilder(state.deviceInfo)).toPrettyString():"disabled"), displayed: false)
+        sendEvent(name: "deviceSettings", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.listSettings)).toPrettyString():"disabled"), displayed: false)
+        sendEvent(name: "deviceInfo", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.deviceInfo)).toPrettyString():"disabled"), displayed: false)
 
         sendEvent(name: "injectJsCode", value: "${state.listSettings.injectJsCode}", displayed: false)
         sendEvent(name: "currentPage", value: "${state.deviceInfo.currentPage}", displayed: false)
@@ -627,6 +627,8 @@ def update() {
         sendEvent(name: "currentFragment", value: "${state.deviceInfo.currentFragment}", displayed: false)
         sendEvent(name: "wifiSignalLevel", value: "${state.deviceInfo.wifiSignalLevel}", displayed: false)
         sendEvent(name: "timeToScreensaverV2", value: "${state.listSettings.timeToScreensaverV2}", displayed: false)
+        
+        injectJavaScriptCode() // not sure if this belongs here. leaving it for now. 
 
     }
     return ((nextRefresh>settings.devicePollRateSecs.toInteger())?settings.devicePollRateSecs.toInteger():nextRefresh)
@@ -663,4 +665,15 @@ String convertIPtoHex(ip) {
 String convertPortToHex(port) {
     String hexport = port.toString().format( '%04x', port.toInteger() )
     return hexport
+}
+
+// Store the MAC address as the device ID so that it can talk to SmartThings
+// https://github.com/stjohnjohnson/smartthings-mqtt-bridge/blob/master/devicetypes/stj/mqtt-bridge.src/mqtt-bridge.groovy
+def setNetworkAddress() {
+    // Setting Network Device Id
+    def hex = "$settings.mac".toUpperCase().replaceAll(':', '')
+    if (device.deviceNetworkId != "$hex") {
+        device.deviceNetworkId = "$hex"
+        log.debug "Device Network Id set to ${device.deviceNetworkId}"
+    }
 }
