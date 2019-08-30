@@ -327,13 +327,13 @@ def injectJavaScriptCode() {
 def setStringSetting(String key, String value) {
     def cmd = "?type=json&password=${devicePassword}&cmd=setStringSetting&key=${key}&value=${URLEncoder.encode(value, "UTF-8")}"
     addEvent(["setStringSetting", key, value, cmd])
-    fetchSettings()
+    runIn(1, fetchSettings)
 }
 
 def setBooleanSetting(String key, String value) {
     def cmd = "?type=json&password=${devicePassword}&cmd=setBooleanSetting&key=${key}&value=${URLEncoder.encode(value, "UTF-8")}"
     addEvent(["setBooleanSetting", key, value, cmd])
-    fetchSettings()
+    runIn(1, fetchSettings)
 }
 
 def getStringSetting(String key, String obj = 'listSettings') {
