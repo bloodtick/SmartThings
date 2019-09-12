@@ -43,7 +43,7 @@ metadata {
 	
     preferences {		
         input "tempReporting", "enum",
-            title: "Notice: Press Flex Configuration button after changing preferences.\n\nTemperature Report Interval on USB:",
+            title: "Notice: Press Flex Configuration button after changing preferences.\n\nTemperature Interval on USB Power:",
             defaultValue: tempReportingSetting,
             required: false,
             displayDuringSetup: false,
@@ -62,7 +62,7 @@ metadata {
             options: lightSensitivityOptions.collect { it.name }
 
         input "lightDetectionDelay", "enum",
-            title: "Light Detection Delay on USB (detect blinking):",
+            title: "Light Detection Delay on USB Power (detect blinking):",
             defaultValue: lightDetectionDelaySetting,
             required: false,
             displayDuringSetup: false,
@@ -86,7 +86,7 @@ metadata {
                     icon: "st.illuminance.illuminance.dark",
                     backgroundColor:"#ffffff"
                 attributeState "colorchange", 
-                    label:'Color Change', 
+                    label:'On', 
                     icon:"st.illuminance.illuminance.light", 
                     backgroundColor:"#00dbdb"
                 attributeState "on", 
