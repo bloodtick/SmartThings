@@ -317,23 +317,23 @@ def injectJavaScriptCode() {
 
     if (device.currentValue("injectJsCode") != myInjectJsCode) {
         log.debug "Executing 'injectJavaScriptCode()' on hub: ${hubaddress}"
-        if ( state.listSettings && !state.listSettings.websiteIntegration )
-        	setBooleanSetting( "websiteIntegration", "true" )
-        setStringSetting( "injectJsCode", myInjectJsCode )
+        if ( state.listSettings && !state.listSettings.websiteIntegration ) {
+            setBooleanSetting( "websiteIntegration", "true" ) }
+        setStringSetting( "injectJsCode", state.listSettings.injectJsCode = myInjectJsCode, 5 )
         loadURL( state.deviceInfo.currentPage ) // Need to reload webpage to update JavaScript
     }
 }
 
-def setStringSetting(String key, String value) {
+def setStringSetting(String key, String value, nextRefresh=1) {
     def cmd = "?type=json&password=${devicePassword}&cmd=setStringSetting&key=${key}&value=${URLEncoder.encode(value, "UTF-8")}"
     addEvent(["setStringSetting", key, value, cmd])
-    runIn(1, fetchSettings)
+    runIn(nextRefresh, fetchSettings)
 }
 
-def setBooleanSetting(String key, String value) {
+def setBooleanSetting(String key, String value, nextRefresh=1) {
     def cmd = "?type=json&password=${devicePassword}&cmd=setBooleanSetting&key=${key}&value=${URLEncoder.encode(value, "UTF-8")}"
     addEvent(["setBooleanSetting", key, value, cmd])
-    runIn(1, fetchSettings)
+    runIn(nextRefresh, fetchSettings)
 }
 
 def getStringSetting(String key, String obj = 'listSettings') {
