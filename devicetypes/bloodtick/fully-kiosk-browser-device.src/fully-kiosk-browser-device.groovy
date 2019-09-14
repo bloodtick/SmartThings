@@ -142,7 +142,6 @@ preferences {
     input(name:"devicePollRateSecs", type: "number", title: "Device Poll Rate (30-300 seconds)", description: "Default is 300 seconds", range: "30..300", defaultValue: "300", displayDuringSetup: false)
     input(name:"deviceMAC", type:"string", title:"MAC Address of Device", defaultValue: "Awaiting Device Response", required: false, displayDuringSetup: false)
     input(name:"deviceStoreDeviceConfig", type: "bool", title: "Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
-    input(name:"devicePiston", type:"string", title: "WebCoRE External URL\n(Requires Fully JavaScript set to enabled)", description: "Optional JavaScript status event", defaultValue: "", required: false, displayDuringSetup: false)
 }
 
 def installed() {
@@ -152,7 +151,6 @@ def installed() {
     settings.devicePollRateSecs = 300
     settings.deviceMAC = "Awaiting Device Response"
     settings.deviceStoreDeviceConfig = false
-    settings.devicePiston = ""
     log.debug "Executing 'installed()' with settings: ${settings}"
     initialize()
 }
@@ -287,41 +285,6 @@ def speak(String text) { // named for smartthing capability not fully method
 def sendGenericCommand(value) {
     def cmd = "?type=json&password=${devicePassword}&cmd=${value}"
     addEvent(["command", value, null, cmd])
-}
-
-def injectJavaScriptCode() {
-
-    def hubaddress = device.hub.getDataValue("localIP") + ":" + device.hub.getDataValue("localSrvPortTCP")
-    def myInjectJsCode = ""
-
-    // Todo: Unknown if this will ever work. If so, don't need an application running like webCoRE
-    //def sendit = "fully.sendHexDataToTcpPort('0x35 0x00 0x55', '192.168.1.103', 39500);"
-    //myInjectJsCode = "function myA() {${sendit}}; fully.bind('onScreensaverStop','myA();');"
-
-    // simple orginal test. just left here for reference.
-    //myInjectJsCode = "function myA() {alert('onScreensaverStop');}; fully.bind('onScreensaverStop','myA();');"
-
-    if (settings.devicePiston && settings.devicePiston.contains('http') ) {
-        def piston = settings.devicePiston
-        def mySend = "function mySend(value) {var xhr = new XMLHttpRequest(); xhr.open('GET','${piston}?mac='+fully.getMacAddress()+'&ip4='+fully.getIp4Address()+'&cmd='+value,true); xhr.send();};"
-        def myCmd1 = "fully.bind('onScreensaverStop',\"mySend('onScreensaverStop');\"); fully.bind('onScreensaverStart',\"mySend('onScreensaverStart');\");"
-        myCmd1 += " fully.bind('screenOn',\"mySend('screenOn');\"); fully.bind('screenOff',\"mySend('screenOff');\");"
-        myCmd1 += " fully.bind('unplugged',\"mySend('unplugged');\"); fully.bind('pluggedAC',\"mySend('pluggedAC');\"); fully.bind('internetReconnect',\"mySend('internetReconnect');\");"
-        if (state.listSettings && state.listSettings.motionDetection) {
-            //myCmd1 += " fully.bind('onMotion',\"mySend('onMotion');\");" // was a little noisy. seems like motion didnt trigger On all the time.
-        }
-        // hashchange&popstate&load but all didn't work. so just old school polling again.
-        def myCmd2 = "var loc=''; setInterval(function() {if(location.href!=loc) {mySend('onUrlChange'); loc=location.href;}},1000);"
-        myInjectJsCode = "${mySend} ${myCmd1} ${myCmd2}"
-    }
-
-    if (device.currentValue("injectJsCode") != myInjectJsCode) {
-        log.debug "Executing 'injectJavaScriptCode()' on hub: ${hubaddress}"
-        if ( state.listSettings && !state.listSettings.websiteIntegration ) {
-            setBooleanSetting( "websiteIntegration", "true" ) }
-        setStringSetting( "injectJsCode", state.listSettings.injectJsCode = myInjectJsCode, 5 )
-        loadURL( state.deviceInfo.currentPage ) // Need to reload webpage to update JavaScript
-    }
 }
 
 def setStringSetting(String key, String value, nextRefresh=1) {
@@ -627,9 +590,6 @@ def update() {
         sendEvent(name: "currentFragment", value: "${state.deviceInfo.currentFragment}", displayed: false)
         sendEvent(name: "wifiSignalLevel", value: "${state.deviceInfo.wifiSignalLevel}", displayed: false)
         sendEvent(name: "timeToScreensaverV2", value: "${state.listSettings.timeToScreensaverV2}", displayed: false)
-        
-        injectJavaScriptCode() // not sure if this belongs here. leaving it for now. 
-
     }
     return ((nextRefresh>settings.devicePollRateSecs.toInteger())?settings.devicePollRateSecs.toInteger():nextRefresh)
 }
