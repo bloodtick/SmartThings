@@ -138,9 +138,8 @@ preferences {
     input(name:"deviceIp", type:"text", title: "Device IP Address", description: "Device IP Address", defaultValue: "127.0.0.1", required: true, displayDuringSetup: true)
     input(name:"devicePort", type:"number", title: "Device IP Port", description: "Default is port 2323", defaultValue: "2323", required: false, displayDuringSetup: true)
     input(name:"devicePassword", type:"string", title:"Fully Kiosk Browser Password", required: true, displayDuringSetup: true)
-    input(name:"deviceAllowScreenOff", type: "bool", title: "Allow Screen Off Command", description: "Diverts screen off and on commands to screensaver on and off commands", defaultValue: "false", displayDuringSetup: false)
+    input(name:"deviceAllowScreenOff", type: "bool", title: "Allow Screen Off Command", description: "Diverts screen off and on commands to screensaver on and off commands. Defaulted to off for Fire tablets", defaultValue: "false", displayDuringSetup: false)
     input(name:"devicePollRateSecs", type: "number", title: "Device Poll Rate (30-300 seconds)", description: "Default is 300 seconds", range: "30..300", defaultValue: "300", displayDuringSetup: false)
-    input(name:"deviceMAC", type:"string", title:"MAC Address of Device", defaultValue: "Awaiting Device Response", required: false, displayDuringSetup: false)
     input(name:"deviceStoreDeviceConfig", type: "bool", title: "Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
 }
 
@@ -149,7 +148,6 @@ def installed() {
     settings.devicePort = 2323
     settings.deviceAllowScreenOff = false
     settings.devicePollRateSecs = 300
-    settings.deviceMAC = "Awaiting Device Response"
     settings.deviceStoreDeviceConfig = false
     sendEvent(name: "level", value: "50", displayed: false)
     sendEvent(name: "speechVolume", value: "50", displayed: false)
@@ -322,12 +320,6 @@ def getBooleanSetting(String key, String obj = 'listSettings') {
 def refresh() {
     log.debug "Executing 'refresh()'"
     fetchInfo()
-    // this is tricky. The preference can NOT be blank. So if you clear, will need 'Awaiting Device Response'
-    // added by user or will auto fill in the second time around.
-    if(state?.deviceInfo?.hasProperty('mac') && settings.deviceMAC=="Awaiting Device Response") {
-        device.updateSetting("deviceMAC", settings.deviceMAC = state.deviceInfo.mac)
-        log.debug "MAC address found and set to: ${settings.deviceMAC}"
-    }
 }
 
 def poll() {
@@ -382,7 +374,7 @@ def peakEvent() {
 
 def runPostCmd() {
     if (peakEvent()) {
-        log.trace "Running sendPostCmd again since queue was not cleared"
+        log.info "Running sendPostCmd again since queue was not cleared"
         state.txCounter=-1
     }        
     sendPostCmd()
@@ -468,7 +460,7 @@ def decodePostResponse(body) {
         log.debug "rx: ${state.rxCounter} :: deviceInfo"
         
         if (event==null || event.type!="deviceInfo")
-        	log.error "deviceInfo event was expected but was: ${event}"
+        	log.info "deviceInfo event was expected but was: ${event}"
         
         state.deviceInfo = body 
         //log.debug "parseLanMessage body: '${state.deviceInfo}'"
@@ -477,7 +469,7 @@ def decodePostResponse(body) {
     	log.debug "rx: ${state.rxCounter} :: listSettings"
         
         if (event==null || event.type!="listSettings")
-        	log.error "listSettings event was expected but was: ${event}"
+        	log.info "listSettings event was expected but was: ${event}"
         
         state.listSettings = body
 		//log.debug "parseLanMessage body: '${state.listSettings}'"
@@ -486,7 +478,7 @@ def decodePostResponse(body) {
 		log.debug "rx: ${state.rxCounter} :: ${body.statustext}"
 
         if (event==null || (event.type!="command" && !event.type.contains("Setting"))) {
-        	log.error "command or setting event was expected but was: ${event}"
+        	log.info "command or setting event was expected but was: ${event}"
             runIn(2, fetchSettings)
         }
         //log.debug "Processing event: ${body} with event: ${event}"
