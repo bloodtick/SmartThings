@@ -151,6 +151,8 @@ def installed() {
     settings.devicePollRateSecs = 300
     settings.deviceMAC = "Awaiting Device Response"
     settings.deviceStoreDeviceConfig = false
+    sendEvent(name: "level", value: "50", displayed: false)
+    sendEvent(name: "speechVolume", value: "50", displayed: false)
     log.debug "Executing 'installed()' with settings: ${settings}"
     initialize()
 }
@@ -165,8 +167,12 @@ def initialize() {
     unschedule()
     sendEvent(name: "switch", value: "off")
     sendEvent(name: "battery", value: "100")
-    sendEvent(name: "DeviceWatch-Enroll", value: "{\"protocol\": \"LAN\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${device.hub.hardwareID}\"}", displayed: false)
-    sendEvent(name: "checkInterval", value: 1920, data: [protocol: "lan", hubHardwareId: device.hub.hardwareID], displayed: false)
+    if (device?.hub?.hardwareID ) {
+        sendEvent(name: "DeviceWatch-Enroll", value: "{\"protocol\": \"LAN\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${device.hub.hardwareID}\"}", displayed: false)
+        sendEvent(name: "checkInterval", value: 1920, data: [protocol: "lan", hubHardwareId: device.hub.hardwareID], displayed: false)
+    } else {
+    	log.info "This device is not yet assigned to a SmartThings Hub"
+    }
     state.deviceInfo = ""
     state.listSettings = ""
 
@@ -318,7 +324,7 @@ def refresh() {
     fetchInfo()
     // this is tricky. The preference can NOT be blank. So if you clear, will need 'Awaiting Device Response'
     // added by user or will auto fill in the second time around.
-    if(state.deviceInfo.mac && settings.deviceMAC=="Awaiting Device Response") {
+    if(state?.deviceInfo?.hasProperty('mac') && settings.deviceMAC=="Awaiting Device Response") {
         device.updateSetting("deviceMAC", settings.deviceMAC = state.deviceInfo.mac)
         log.debug "MAC address found and set to: ${settings.deviceMAC}"
     }
@@ -419,7 +425,10 @@ def sendPostCmd() {
 }
 
 def parse(String description) {
-	//log.debug "description: '${description}'"
+	if ( description=="updated" ) {
+		log.debug "description: '${description}'"
+        return
+    }    
 	def msg = parseLanMessage(description)
  	//log.debug "parsed lan msg: '${msg}'"
     if (msg.header!=null && msg.body!=null) {
