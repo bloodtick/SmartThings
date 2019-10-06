@@ -73,7 +73,6 @@ metadata {
             tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
                 attributeState "on", label:'${name}', action:"switch.off", icon:"https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/tablet.png", backgroundColor:"#00a0dc", nextState:"off"
                 attributeState "off", label:'${name}', action:"switch.on", icon:"https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/tablet.png", backgroundColor:"#ffffff", nextState:"on"
-                //attributeState "offline", label:'${name}', icon:"st.switches.switch.off", backgroundColor:"#ff0000"
             }
             tileAttribute ("device.level", key: "SLIDER_CONTROL") {
                 attributeState "level", action:"switch level.setLevel"
@@ -98,8 +97,8 @@ metadata {
         valueTile("currentFragment", "device.currentFragment", height: 1, width: 2, decoration: "flat") {
             state "default", label:'[ Display ]\n${currentValue}'
         }
-        valueTile("batteryLevel", "device.batteryLevel", height: 1, width: 2, decoration: "flat") {
-            state "default", label:'[ Battery ]\n${currentValue}'
+        valueTile("battery", "device.battery", height: 1, width: 2, decoration: "flat") {
+            state "default", label:'[ Battery ]\n${currentValue}%'
         }
         valueTile("wifiSignalLevel", "device.wifiSignalLevel", height: 1, width: 2, decoration: "flat") {
             state "default", label:'[ Wifi Level ]\n${currentValue}'
@@ -130,7 +129,7 @@ metadata {
 
         main "switch"
         details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","currentFragment","wifiSignalLevel","screenBrightness","timeToScreensaverV2",
-                 "batteryLevel","screen","screenSaver","speechTest","speechVolume","refresh","listSettings"])
+                 "battery","screen","screenSaver","speechTest","speechVolume","refresh","listSettings"])
     }
 }
 
@@ -220,87 +219,68 @@ def setScreensaverTimeout(value) {
 }
 
 def fetchSettings() {
-    def cmd = "?type=json&password=${devicePassword}&cmd=listSettings"
-    addEvent(["listSettings", null, null, cmd])    
+    addEvent(["listSettings", null, null, "cmd=listSettings"])    
 }
 
 def fetchInfo() {
-    def cmd = "?type=json&password=${devicePassword}&cmd=deviceInfo"
-    addEvent(["deviceInfo", null, null, cmd])
+    addEvent(["deviceInfo", null, null, "cmd=deviceInfo"])
 }
 
 def screenOn() {
     if (settings.deviceAllowScreenOff==false) return stopScreensaver()
-    //sendEvent(name: "screen", value: "on", displayed: false )   
-    def cmd = "?type=json&password=${devicePassword}&cmd=screenOn"
-    addEvent(["command", "screenOn", null, cmd])
+    addEvent(["command", "screenOn", null, "cmd=screenOn"])
 }
 
 def screenOff() {
     if (settings.deviceAllowScreenOff==false) return startScreensaver()
-    //sendEvent(name: "screen", value: "off", displayed: false )    
-    def cmd = "?type=json&password=${devicePassword}&cmd=screenOff"
-    addEvent(["command", "screenOff", null, cmd])
+    addEvent(["command", "screenOff", null, "cmd=screenOff"])
 }
 
 def stopScreensaver() {
-    //sendEvent(name: "screenSaver", value: "off", displayed: false )
-    def cmd = "?type=json&password=${devicePassword}&cmd=stopScreensaver"
-    addEvent(["command", "stopScreensaver", null, cmd])
+    addEvent(["command", "stopScreensaver", null, "cmd=stopScreensaver"])
 }
 
 def startScreensaver() {
-    //sendEvent(name: "screenSaver", value: "on", displayed: false )
-    def cmd = "?type=json&password=${devicePassword}&cmd=startScreensaver"
-    addEvent(["command", "startScreensaver", null, cmd])
+    addEvent(["command", "startScreensaver", null, "cmd=startScreensaver"])
 }
 
 def triggerMotion() {
-    def cmd = "?type=json&password=${devicePassword}&cmd=triggerMotion"
-    addEvent(["command", "triggerMotion", null, cmd])
+    addEvent(["command", "triggerMotion", null, "cmd=triggerMotion"])
 }
 
 def toForeground() {
-    def cmd = "?type=json&password=${devicePassword}&cmd=toForeground"
-    addEvent(["command", "toForeground", null, cmd])
+    addEvent(["command", "toForeground", null, "cmd=toForeground"])
 }
 
 def loadStartURL() {
-    def cmd = "?type=json&password=${devicePassword}&cmd=loadStartURL"
-    addEvent(["command", "loadStartURL", null, cmd])
+    addEvent(["command", "loadStartURL", null, "cmd=loadStartURL"])
 }
 
 def loadURL(String value) {
-    def cmd = "?type=json&password=${devicePassword}&cmd=loadURL&url=${value}"
-    addEvent(["command", "loadURL", null, cmd])
+    addEvent(["command", "loadURL", null, "cmd=loadURL&url=${value}"])
 }
 
 def setSpeechVolume(level, stream=9) {
     speechVolumeUpdate(level)
-    def cmd = "?type=json&password=${devicePassword}&cmd=setAudioVolume&level=${level}&stream=${stream}"
-    addEvent(["command", "setAudioVolume", null, cmd])
+    addEvent(["command", "setAudioVolume", null, "cmd=setAudioVolume&level=${level}&stream=${stream}"])
 }
 
 def speak(String text) { // named for smartthing capability not fully method
-    def cmd = "?type=json&password=${devicePassword}&cmd=textToSpeech&text=${URLEncoder.encode(text, "UTF-8")}"
-    addEvent(["command", "textToSpeech", "${text}", cmd])
+    addEvent(["command", "textToSpeech", "${text}", "cmd=textToSpeech&text=${URLEncoder.encode(text, "UTF-8")}"])
 }
 
 def sendGenericCommand(value) {
-    def cmd = "?type=json&password=${devicePassword}&cmd=${value}"
-    addEvent(["command", value, null, cmd])
+    addEvent(["command", value, null, "cmd=${URLEncoder.encode(value, "UTF-8")}"])
 }
 
 def setStringSetting(String key, String value, nextRefresh=1) {
-    def cmd = "?type=json&password=${devicePassword}&cmd=setStringSetting&key=${key}&value=${URLEncoder.encode(value, "UTF-8")}"
-    addEvent(["setStringSetting", key, value, cmd])
-    runIn(nextRefresh, fetchSettings)
+    addEvent(["setStringSetting", key, value, "cmd=setStringSetting&key=${key}&value=${URLEncoder.encode(value, "UTF-8")}"])
+    nextRefresh ?: runIn(nextRefresh, fetchSettings)
 }
 
 def setBooleanSetting(String key, String value, nextRefresh=1) {
-    def cmd = "?type=json&password=${devicePassword}&cmd=setBooleanSetting&key=${key}&value=${URLEncoder.encode(value, "UTF-8")}"
-    addEvent(["setBooleanSetting", key, value, cmd])
-    runIn(nextRefresh, fetchSettings)
+    addEvent(["setBooleanSetting", key, value, "cmd=setBooleanSetting&key=${key}&value=${URLEncoder.encode(value, "UTF-8")}"])
+    nextRefresh ?: runIn(nextRefresh, fetchSettings)
 }
 
 def getStringSetting(String key, String obj = 'listSettings') {
@@ -390,7 +370,7 @@ def sendPostCmd() {
         // until the queue gets cleared in 10 seconds. appears to work okay. 
         runIn(10, runPostCmd) 
 
-        def cmd = event.postCmd
+        def cmd = "?type=json&password=${devicePassword}&" + event.postCmd
         log.debug "tx: ${state.txCounter} :: (${cmd})"
 
         if (device.currentValue("status") != "offline")
@@ -463,7 +443,6 @@ def decodePostResponse(body) {
         	log.info "deviceInfo event was expected but was: ${event}"
         
         state.deviceInfo = body 
-        //log.debug "parseLanMessage body: '${state.deviceInfo}'"
     }
     else if (body.timeToScreensaverV2!=null) {
     	log.debug "rx: ${state.rxCounter} :: listSettings"
@@ -472,7 +451,6 @@ def decodePostResponse(body) {
         	log.info "listSettings event was expected but was: ${event}"
         
         state.listSettings = body
-		//log.debug "parseLanMessage body: '${state.listSettings}'"
     }
     else if (body.status && body.statustext && body.status.contains("OK")) {
 		log.debug "rx: ${state.rxCounter} :: ${body.statustext}"
@@ -483,7 +461,7 @@ def decodePostResponse(body) {
         }
         //log.debug "Processing event: ${body} with event: ${event}"
         switch (body.statustext) {
-            case "Screesaver stopped": // misspelled return from Fully
+            case "Screesaver stopped": // misspelled return from Fully early versions
             case "Screensaver stopped":
             	state.deviceInfo.currentFragment = "main"
                 log.debug "${body.statustext}"
@@ -587,7 +565,7 @@ def update() {
         sendEvent(name: "appVersionName", value: "${state.deviceInfo.appVersionName}", displayed: false)
         sendEvent(name: "isScreenOn", value: "${state.deviceInfo.isScreenOn?'true':'false'}", displayed: false)
         sendEvent(name: "currentFragment", value: "${state.deviceInfo.currentFragment}", displayed: false)
-        sendEvent(name: "batteryLevel", value: "${state.deviceInfo.plugged?'plugged':"${state.deviceInfo.batteryLevel}%"}", displayed: false)
+        sendEvent(name: "battery", value: "${state.deviceInfo.batteryLevel}", displayed: false)
         sendEvent(name: "currentFragment", value: "${state.deviceInfo.currentFragment}", displayed: false)
         sendEvent(name: "wifiSignalLevel", value: "${state.deviceInfo.wifiSignalLevel}", displayed: false)
         sendEvent(name: "timeToScreensaverV2", value: "${state.listSettings.timeToScreensaverV2}", displayed: false)
@@ -628,7 +606,8 @@ String convertPortToHex(port) {
     return hexport
 }
 
-// Store the MAC address as the device ID so that it can talk to SmartThings
+// Stores the MAC address as the device ID so that it can talk to SmartThings
+// Not used today. Maybe use to support dynamic DHCP. Today just static works.
 // https://github.com/stjohnjohnson/smartthings-mqtt-bridge/blob/master/devicetypes/stj/mqtt-bridge.src/mqtt-bridge.groovy
 def setNetworkAddress() {
     // Setting Network Device Id
