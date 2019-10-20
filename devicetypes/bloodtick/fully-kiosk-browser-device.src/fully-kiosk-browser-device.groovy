@@ -165,10 +165,10 @@ def initialize() {
     sendEvent(name: "switch", value: "off")
     sendEvent(name: "battery", value: "100")
     if (device?.hub?.hardwareID ) {
-        sendEvent(name: "DeviceWatch-Enroll", value: "{\"protocol\": \"LAN\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${device.hub.hardwareID}\"}", displayed: false)
+        sendEvent(name: "DeviceWatch-Enroll", value: [protocol: "lan", scheme: "untracked", hubHardwareId: device.hub.hardwareID].encodeAsJson(), displayed: false)
         sendEvent(name: "checkInterval", value: 1920, data: [protocol: "lan", hubHardwareId: device.hub.hardwareID], displayed: false)
     } else {
-    	log.info "This device is not yet assigned to a SmartThings Hub"
+        log.info "This device is not yet assigned to a SmartThings Hub"
     }
     state.deviceInfo = ""
     state.listSettings = ""
