@@ -62,6 +62,8 @@ metadata {
         command "sendGenericCommand", ["string"]
         command "speachTestAction"
         command "speechVolumeUpdate"
+        command "getCamshot"
+        command "getScreenshot"
     }
 
     // simulator metadata
@@ -107,8 +109,8 @@ metadata {
             state "default", label:'[ Screen Saver ]\n${currentValue} sec'
         }        
         standardTile("screenSaver", "device.screenSaver", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
-            state "off", label: 'ScreenSaver Off', action: "startScreensaver", icon: "https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/on-blue-3x.png", backgroundColor: "#ffffff"/*, nextState:"off"*/
-            state "on", label: 'ScreenSaver On', action: "stopScreensaver", icon: "st.switches.switch.off", backgroundColor: "#ffffff"/*, nextState:"on"*/
+            state "off", label: 'ScrnSaver Off', action: "startScreensaver", icon: "https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/on-blue-3x.png", backgroundColor: "#ffffff"/*, nextState:"off"*/
+            state "on", label: 'ScrnSaver On', action: "stopScreensaver", icon: "st.switches.switch.off", backgroundColor: "#ffffff"/*, nextState:"on"*/
         }        
         standardTile("screen", "device.screen", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
             state "on", label: 'Screen On', action: "screenOff", icon: "https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/on-blue-3x.png", backgroundColor: "#ffffff"/*, nextState:"off"*/
@@ -126,10 +128,16 @@ metadata {
         standardTile("listSettings", "device.switch", inactiveLabel: false, height: 1, width: 2, decoration: "flat") {
             state "default", label:'Settings', action:"fetchSettings", icon:"st.secondary.refresh-icon"
         }
+        standardTile("camshot", "device.switch", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
+            state "default", label:'Camshot', action:"getCamshot", icon:"st.camera.take-photo"
+        }
+        standardTile("screenshot", "device.switch", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
+            state "default", label:'Screenshot', action:"getScreenshot", icon:"st.motion.acceleration.inactive"
+        }
 
         main "switch"
         details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","currentFragment","wifiSignalLevel","screenBrightness","timeToScreensaverV2",
-                 "battery","screen","screenSaver","speechTest","speechVolume","refresh","listSettings"])
+                 "battery","screen","screenSaver","camshot","screenshot","refresh","listSettings","speechTest","speechVolume"])
     }
 }
 
@@ -203,6 +211,15 @@ def setScreenBrightness(level) {
 
 def speachTestAction() {
     setVolumeAndSpeak(device.currentValue("speechVolume").toInteger(), "Fully Kiosk Browser Speaking Test")
+}
+
+def getCamshot() {
+    sendGenericCommand("getCamshot")
+}
+
+def getScreenshot() {
+    on() // must be on otherwise you get the screensaver
+    sendGenericCommand("getScreenshot")
 }
 
 def speechVolumeUpdate(level) {
@@ -385,6 +402,7 @@ def sendPostCmd() {
                 path: cmd,
                 headers: [HOST: "${settings.deviceIp}:${settings.devicePort}"] + ["X-Request-ID": UUID.randomUUID().toString()]] //nanohttpd doesn't seem to support X-Request-ID
                                                           )
+            if(event.key=="getCamshot" || event.key=="getScreenshot") { hubAction.options = [outputMsgToS3:true] }
         }
         catch (Exception e) {
             log.debug "Exception $e on $hubAction"
@@ -397,37 +415,53 @@ def sendPostCmd() {
 }
 
 def parse(String description) {
-	if ( description=="updated" ) {
-		log.debug "description: '${description}'"
+    if ( description=="updated" ) {
+        log.debug "description: '${description}'"
         return
     }    
-	def msg = parseLanMessage(description)
- 	//log.debug "parsed lan msg: '${msg}'"
-    if (msg.header!=null && msg.body!=null) {
-    	def headerString = msg.header        
-    	def bodyString = msg.body
-    	def body = new JsonSlurper().parseText(bodyString)
-       
+    def msg = parseLanMessage(description)
+    //log.debug "parsed lan msg: '${msg}'"
+    if (msg?.header && msg?.body) {
+        def headerString = msg.header        
+        def bodyString = msg.body
+        def body = new JsonSlurper().parseText(bodyString)
+
         if (headerString.contains("200 OK")) {
-            try {
-                unschedule("setOffline")
-            } catch (e) {
-                log.error "unschedule(\"setOffline\")"
-            }
-			// everything was healthy. tell smartthings & decode.
+            unschedule("setOffline")
+            // everything was healthy. tell smartthings & decode.
             setOnline()
-            
             decodePostResponse(body)   
-     
-         } else {
-         	log.error "parse() header did not respond '200 OK': ${headerString}"
-         }       
-	} else {
-    	log.error "parse() parseLanMessage could not decode: ${description}"
+        } else {
+            log.error "parse() header did not respond '200 OK': ${headerString}"
+        }       
+    } else if (msg?.tempImageKey) {
+        unschedule("setOffline")
+        decodeImageResponse(description)
+    } else {
+        log.error "parse() parseLanMessage could not decode: ${msg}"
+        pullEvent()
     }    
-    
+
     runIn(20, clrEvents) // watchdog: needs to be less then settings.devicePollRateSecs
     sendPostCmd()
+}
+
+def decodeImageResponse(String description) {
+    def event = pullEvent()
+    def map = stringToMap(description)
+    if (map?.tempImageKey) {
+        try {
+            log.debug "decodeImageResponse(): ${map.tempImageKey}"
+            def name = (java.util.UUID.randomUUID().toString().replaceAll('-', ''))
+            storeTemporaryImage(map.tempImageKey, name)
+            //ByteArrayInputStream image = getImage(name)
+            //log.debug "image: ${image}"
+        } catch (Exception e) {
+            log.error e
+        }
+    } else if (map.error) {
+        log.error "Error: ${map.error}"
+    }
 }
 
 def decodePostResponse(body) {
@@ -444,7 +478,7 @@ def decodePostResponse(body) {
         
         state.deviceInfo = body 
     }
-    else if (body.timeToScreensaverV2!=null) {
+    else if (body?.timeToScreensaverV2) {
     	log.debug "rx: ${state.rxCounter} :: listSettings"
         
         if (event==null || event.type!="listSettings")
@@ -452,7 +486,7 @@ def decodePostResponse(body) {
         
         state.listSettings = body
     }
-    else if (body.status && body.statustext && body.status.contains("OK")) {
+    else if (body?.status && body?.statustext && body.status.contains("OK")) {
 		log.debug "rx: ${state.rxCounter} :: ${body.statustext}"
 
         if (event==null || (event.type!="command" && !event.type.contains("Setting"))) {
@@ -519,7 +553,7 @@ def update() {
 
     def nextRefresh = settings.devicePollRateSecs.toInteger()
 
-    if (state.deviceInfo && state.listSettings) {
+    if (state?.deviceInfo && state?.listSettings) {
 
         def lastpoll_str = new Date().format("yyyy-MM-dd h:mm:ss a", location.timeZone)
         sendEvent(name: "lastPoll", value: lastpoll_str, displayed: false)
