@@ -31,6 +31,8 @@ metadata {
         capability "Health Check"
         capability "Battery"
         capability "Speech Synthesis"
+        capability "Image Capture"
+        capability "Touch Sensor"
 
         attribute "deviceInfo", "string"
         attribute "deviceSettings", "string"
@@ -40,6 +42,12 @@ metadata {
         attribute "screenSaver", "string"
         attribute "currentPage", "string"
         attribute "injectJsCode", "string"
+        attribute "altitude", "number"
+        attribute "latitude", "number"
+        attribute "longitude", "number"
+        attribute "s3url", "string"
+        attribute "s3key", "string"
+        attribute "touch", "string"
 
         command "screenOn"
         command "screenOff"
@@ -133,6 +141,9 @@ metadata {
         }
         standardTile("screenshot", "device.switch", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
             state "default", label:'Screenshot', action:"getScreenshot", icon:"st.motion.acceleration.inactive"
+        }        
+        standardTile("image", "device.image", width: 1, height: 1, canChangeIcon: false, inactiveLabel: true, canChangeBackground: true) {
+            state "default", label: "", action: "", icon: "st.camera.dropcam-centered", backgroundColor: "#FFFFFF"
         }
 
         main "switch"
@@ -148,6 +159,8 @@ preferences {
     input(name:"deviceAllowScreenOff", type: "bool", title: "Allow Screen Off Command", description: "Diverts screen off and on commands to screensaver on and off commands. Defaulted to off for Fire tablets", defaultValue: "false", displayDuringSetup: false)
     input(name:"devicePollRateSecs", type: "number", title: "Device Poll Rate (30-300 seconds)", description: "Default is 300 seconds", range: "30..300", defaultValue: "300", displayDuringSetup: false)
     input(name:"deviceStoreDeviceConfig", type: "bool", title: "Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
+    input(name:"deviceS3url", type:"string", title:"AWS Lambda URL (optional)", required: false, displayDuringSetup: false)
+    input(name:"deviceS3key", type:"string", title:"AWS Lambda X-Api-Key (if required)", required: false, displayDuringSetup: false)
 }
 
 def installed() {
@@ -156,6 +169,8 @@ def installed() {
     settings.deviceAllowScreenOff = false
     settings.devicePollRateSecs = 300
     settings.deviceStoreDeviceConfig = false
+    settings.deviceS3url =""
+    settings.deviceS3key =""
     sendEvent(name: "level", value: "50", displayed: false)
     sendEvent(name: "speechVolume", value: "50", displayed: false)
     log.debug "Executing 'installed()' with settings: ${settings}"
@@ -170,8 +185,10 @@ def updated() {
 def initialize() {
     log.debug "Executing 'initialize()'"
     unschedule()
-    sendEvent(name: "switch", value: "off")
-    sendEvent(name: "battery", value: "100")
+    sendEvent(name: "switch", value: "off", displayed: false)
+    sendEvent(name: "battery", value: "100", displayed: false)
+    setS3url( settings.deviceS3url )
+    setS3key( settings.deviceS3key )
     if (device?.hub?.hardwareID ) {
         sendEvent(name: "DeviceWatch-Enroll", value: [protocol: "lan", scheme: "untracked", hubHardwareId: device.hub.hardwareID].encodeAsJson(), displayed: false)
         sendEvent(name: "checkInterval", value: 1920, data: [protocol: "lan", hubHardwareId: device.hub.hardwareID], displayed: false)
@@ -188,7 +205,9 @@ def initialize() {
         fetchSettings()
         fetchInfo() // auto refresh with checkInterval delay
         runEvery15Minutes(ping) // same as fetchSettings
-    } 
+    }
+    // if webCoRE is installed. Update configuration values. 
+    sendEvent(name: "touch", value: (new Date().format("yyyy-MM-dd h:mm:ss a", location.timeZone)), isStateChange: true, displayed: false)
 }
 
 def on() {
@@ -204,6 +223,10 @@ def setLevel(level) {
     setScreenBrightness(level)
 }
 
+def take() {
+    getCamshot()
+}
+
 def setScreenBrightness(level) {
     def value = Math.round(level.toInteger()*2.55).toString()
     setStringSetting("screenBrightness", "${value}")
@@ -214,12 +237,20 @@ def speachTestAction() {
 }
 
 def getCamshot() {
-    sendGenericCommand("getCamshot")
+    if (state?.listSettings?.remoteAdmin && state?.listSettings?.remoteAdminCamshot && state?.listSettings?.motionDetection) {
+        sendGenericCommand("getCamshot")
+    } else {
+        log.debug "getCamshot not configured - remoteAdmin:${state?.listSettings?.remoteAdmin} remoteAdminCamshot:${state?.listSettings?.remoteAdminCamshot} motionDetection:${state?.listSettings?.motionDetection}"
+    }
 }
 
 def getScreenshot() {
-    on() // must be on otherwise you get the screensaver
-    sendGenericCommand("getScreenshot")
+    if (state?.listSettings?.remoteAdmin && state?.listSettings?.remoteAdminScreenshot) {
+        if (device.currentValue("switch") != "on") on() // must be 'on' otherwise you get the screensaver
+        sendGenericCommand("getScreenshot")
+    } else {
+        log.debug "getScreenshot not configured - remoteAdmin:${state?.listSettings?.remoteAdmin} remoteAdminScreenshot:${state?.listSettings?.remoteAdminScreenshot}"
+    }
 }
 
 def speechVolumeUpdate(level) {
@@ -448,14 +479,18 @@ def parse(String description) {
 
 def decodeImageResponse(String description) {
     def event = pullEvent()
+    state.rxCounter=state.rxCounter+1
+
     def map = stringToMap(description)
     if (map?.tempImageKey) {
         try {
-            log.debug "decodeImageResponse(): ${map.tempImageKey}"
-            def name = (java.util.UUID.randomUUID().toString().replaceAll('-', ''))
-            storeTemporaryImage(map.tempImageKey, name)
-            //ByteArrayInputStream image = getImage(name)
-            //log.debug "image: ${image}"
+            log.debug "Executing 'decodeImageResponse()': ${map.tempImageKey}"
+            def strImageName = (java.util.UUID.randomUUID().toString().replaceAll('-', ''))
+            log.debug "rx: ${state.rxCounter} :: image name: ${strImageName}"
+            storeTemporaryImage(map.tempImageKey, strImageName)
+            if(settings?.deviceS3url?.trim()) {
+                sendImageS3(strImageName)
+            }
         } catch (Exception e) {
             log.error e
         }
@@ -532,20 +567,20 @@ def decodePostResponse(body) {
                     break;
                 }
             case "Text To Speech Ok":
-                sendEvent(name: "info", value: "", descriptionText: "TTS: '${event.value}'", isStateChange: true)
-			default:
-            	// i contacted fully support to ask about a generic code reply or sequence_id to validate because handling weird return calls
+            sendEvent(name: "info", value: "", descriptionText: "TTS: '${event.value}'", isStateChange: true)
+            default:
+                // i contacted fully support to ask about a generic code reply or sequence_id to validate because handling weird return calls
                 // are ackward. they told me it was too difficult and they didnt understand why i needed them. oh well. 
-				log.debug "statustext: '${body.statustext}' from event: ${event.type}:${event.key}"
-            	break;
+                log.debug "statustext: '${body.statustext}' from event: ${event.type}:${event.key}"
+            break;
         }
     }
     else {
         log.error "unhandled event: ${event} with reponse:'${body}'"
     }
 
-	def nextRefresh = update()
-	log.debug "Refresh in ${nextRefresh} seconds"
+    def nextRefresh = update()
+    log.debug "Refresh in ${nextRefresh} seconds"
     runIn(nextRefresh, refresh)
 }
 
@@ -603,6 +638,9 @@ def update() {
         sendEvent(name: "currentFragment", value: "${state.deviceInfo.currentFragment}", displayed: false)
         sendEvent(name: "wifiSignalLevel", value: "${state.deviceInfo.wifiSignalLevel}", displayed: false)
         sendEvent(name: "timeToScreensaverV2", value: "${state.listSettings.timeToScreensaverV2}", displayed: false)
+        sendEvent(name: "altitude", value: "${state.deviceInfo.locationAltitude}", displayed: false)
+        sendEvent(name: "latitude", value: "${state.deviceInfo.locationLatitude}", displayed: false)
+        sendEvent(name: "longitude", value: "${state.deviceInfo.locationLongitude}", displayed: false)
     }
     return ((nextRefresh>settings.devicePollRateSecs.toInteger())?settings.devicePollRateSecs.toInteger():nextRefresh)
 }
@@ -638,6 +676,48 @@ String convertIPtoHex(ip) {
 String convertPortToHex(port) {
     String hexport = port.toString().format( '%04x', port.toInteger() )
     return hexport
+}
+
+
+def setS3url(value) {
+    settings.deviceS3url = value
+    sendEvent(name: "s3url", value: value, displayed: false)
+}
+
+def setS3key(value) {
+    settings.deviceS3key = value
+    sendEvent(name: "s3key", value: value, displayed: false)
+}
+
+def sendImageS3(strImageName) {
+    log.debug "Executing 'sendImageS3()' to ${settings.deviceS3url}"
+
+    def strBase64Image = getImage(strImageName).bytes.encodeBase64()
+    def params = [
+        uri: settings.deviceS3url,
+        body: JsonOutput.toJson([ 
+            'device': "${device.displayName}", 
+            'title': "${new Date().getTime()}.jpg", 
+            'image': "${strBase64Image}",
+            'altitude': device.currentValue("altitude"),
+            'latitude': device.currentValue("latitude"), 
+            'longitude': device.currentValue("longitude")
+        ])
+    ]
+    if(settings?.deviceS3key?.trim()) { // you don't need to use x-api-key with lambda. but good idea.
+        params['headers'] = [ "X-Api-Key": settings.deviceS3key ]
+    }
+
+    try {
+        httpPostJson(params) { resp ->
+            //resp.headers.each { log.debug "${it.name} : ${it.value}" }
+            //log.debug "response contentType: ${resp.contentType}"
+            log.debug "response data: ${resp.data}"
+        }
+    }
+    catch (e) {
+        log.error e
+    }
 }
 
 // Stores the MAC address as the device ID so that it can talk to SmartThings
