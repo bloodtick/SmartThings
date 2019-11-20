@@ -72,6 +72,7 @@ metadata {
         command "speechVolumeUpdate"
         command "getCamshot"
         command "getScreenshot"
+        command "fetchImageS3", ["string"]
     }
 
     // simulator metadata
@@ -489,7 +490,7 @@ def decodeImageResponse(String description) {
             log.debug "rx: ${state.rxCounter} :: image name: ${strImageName}"
             storeTemporaryImage(map.tempImageKey, strImageName)
             if(settings?.deviceS3url?.trim()) {
-                sendImageS3(strImageName)
+                storeImageS3(strImageName)
             }
         } catch (Exception e) {
             log.error e
@@ -689,12 +690,12 @@ def setS3key(value) {
     sendEvent(name: "s3key", value: value, displayed: false)
 }
 
-def sendImageS3(strImageName) {
-    log.debug "Executing 'sendImageS3()' to ${settings.deviceS3url}"
+def storeImageS3(strImageName) {
+    log.debug "Executing 'storeImageS3()' to ${settings.deviceS3url}"
 
     def strBase64Image = getImage(strImageName).bytes.encodeBase64()
     def params = [
-        uri: settings.deviceS3url,
+        uri: settings.deviceS3url+'/store',
         body: JsonOutput.toJson([ 
             'device': "${device.displayName}", 
             'title': "${new Date().getTime()}.jpg", 
@@ -713,6 +714,36 @@ def sendImageS3(strImageName) {
             //resp.headers.each { log.debug "${it.name} : ${it.value}" }
             //log.debug "response contentType: ${resp.contentType}"
             log.debug "response data: ${resp.data}"
+        }
+    }
+    catch (e) {
+        log.error e
+    }
+}
+
+def fetchImageS3(strImageName) {
+    log.debug "Executing 'fetchImageS3()' to ${settings.deviceS3url}"
+
+    def params = [
+        uri: settings.deviceS3url+'/fetch',
+        body: JsonOutput.toJson([ 
+            'device': "${device.displayName}", 
+            'title': "${strImageName}", 
+        ])
+    ]
+    if(settings?.deviceS3key?.trim()) { // you don't need to use x-api-key with lambda. but good idea.
+        params['headers'] = [ "X-Api-Key": settings.deviceS3key ]
+    }
+
+    try {
+        httpPostJson(params) { resp ->
+            //resp.headers.each { log.debug "${it.name} : ${it.value}" }
+            //log.debug "response contentType: ${resp.contentType}"
+            //log.debug "response data: ${data}"
+            if (resp?.data?.body) {
+                log.debug "Fetched image: ${strImageName}"
+                storeImage(strImageName, (new ByteArrayInputStream(resp.data.body.decodeBase64())))
+            }
         }
     }
     catch (e) {
