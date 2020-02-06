@@ -110,7 +110,8 @@
     
     preferences {
         input "costperKWh", "decimal", title: "Cost per kWh in dollars", description: "Default is .15", range: "0.001..2", displayDuringSetup: false
-        input "pollRateSecs", "number", title: "Poll Rate when Switch is not off", description: "Default is 300 seconds", range: "15..300", displayDuringSetup: false
+        //input "pollRateSecs", "number", title: "Poll Rate when Switch is not off", description: "Default is 300 seconds", range: "15..300", displayDuringSetup: false
+        input "pollRateSecs", "number", title: "Poll Rate", description: "Default is 300 seconds", range: "15..300", displayDuringSetup: false
         input "returnLastState", "bool", title: "Return to last known state", description: "Return switch to last known state if declared offline", defaultValue: "true", displayDuringSetup: false
 		input "logPower", "bool", title: "Log Power Deltas", description: "Changes in power levels will be logged when enabled", defaultValue: "false", displayDuringSetup: false
         input "msgDebug", "bool", title: "Show Message Counts", description: "Display logged message counts and increase live logging", defaultValue: "false", displayDuringSetup: false
@@ -250,7 +251,8 @@ def decodeInsightResponse( String[] params ) {
     if (!device.currentValue("power_lo") || device.currentValue("power_lo")=="--" || (power.toFloat()<(device.currentValue("power_lo")).toFloat() && value!="off"))
     	sendEvent(name: "power_lo", value: "${power}", descriptionText: "Power low is $power Watts", displayed: true)
     
-	if (value!="off" && pollRateSecs) {
+	//if (value!="off" && pollRateSecs) {
+    if (pollRateSecs) {
     	log.trace "Run autoPollWeMoInsight in ${pollRateSecs.toInteger()} seconds"
     	runIn(pollRateSecs.toInteger(), autoPollWeMoInsight)
     } 
