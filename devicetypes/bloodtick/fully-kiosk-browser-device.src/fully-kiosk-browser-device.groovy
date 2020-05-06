@@ -534,16 +534,18 @@ def decodePostResponse(body) {
             case "Screesaver stopped": // misspelled return from Fully early versions
             case "Screensaver stopped":
             	state.deviceInfo.currentFragment = "main"
-                log.debug "${body.statustext}"
-                break;
-			case "Switching the screen on":
+            	state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
+            	log.debug "${body.statustext}"
+            	break;
+            case "Switching the screen on":
             	state.deviceInfo.isScreenOn = true
             	log.debug "${body.statustext}"
             	break;
             case "Screensaver started":
             	state.deviceInfo.currentFragment = "screensaver"
-                log.debug "${body.statustext}"
-                break;
+            	state.deviceInfo.screenBrightness = state.listSettings.screensaverBrightness.toInteger()
+            	log.debug "${body.statustext}"
+            	break;
             case "Switching the screen off":
             	state.deviceInfo.isScreenOn = false
             	log.debug "${body.statustext}"
@@ -594,15 +596,14 @@ def update() {
         def lastpoll_str = new Date().format("yyyy-MM-dd h:mm:ss a", location.timeZone)
         sendEvent(name: "lastPoll", value: lastpoll_str, displayed: false)
 
-        if (state.deviceInfo.currentFragment=="screensaver" && state.listSettings.screensaverBrightness!="")
-        	state.deviceInfo.screenBrightness = state.listSettings.screensaverBrightness
-        else
-            state.deviceInfo.screenBrightness = state.listSettings.screenBrightness
+        // bug in version 1.39 did not set currentFragment == "screensaver", this was my workaround. should be fixed in later and earlier versions
+        if ((settings.deviceAllowScreenOff==false) && state.deviceInfo.currentFragment=="main" && state.deviceInfo.screenBrightness.toInteger()==state.listSettings.screensaverBrightness.toInteger())
+        	state.deviceInfo.currentFragment="screensaver"
 
-        sendEvent(name: "screen", value: (state.deviceInfo.isScreenOn?"on":"off"), displayed: false )
+        sendEvent(name: "screen", value: (state.deviceInfo.isScreenOn?"on":"off"), displayed: false )        
         sendEvent(name: "screenSaver", value: (state.deviceInfo.currentFragment=="screensaver"?"on":"off"), displayed: false )
 
-        if (state.deviceInfo.isScreenOn && state.deviceInfo.currentFragment!="screensaver") {
+        if (state.deviceInfo.isScreenOn && state.deviceInfo.currentFragment=="main") {
 
             if (device.currentValue("switch") != "on")
             	sendEvent(name: "switch", value: "on", descriptionText: "Fully Kiosk Browser is on")
@@ -612,7 +613,7 @@ def update() {
             	sendEvent(name: "level", value: "${level}", descriptionText: "Screen Brightness is ${level}")
 
             if(state.listSettings.timeToScreensaverV2.toInteger()>0)
-            	nextRefresh = state.listSettings.timeToScreensaverV2.toInteger() + 1          
+            nextRefresh = state.listSettings.timeToScreensaverV2.toInteger() + 1          
         }
         else {
             if (device.currentValue("switch") != "off")
@@ -621,9 +622,8 @@ def update() {
 
         log.debug "Brightness is: ${state.deviceInfo.screenBrightness} (${state.deviceInfo.screenBrightness.toInteger()*100/255}%)"
         log.debug "Screen On: ${state.deviceInfo.isScreenOn}"
-        log.debug "Display is: ${state.deviceInfo.currentFragment}"
-        log.debug "Screen Saver Timeout is: ${state.listSettings.timeToScreensaverV2} secs"
-        log.debug "Screen Saver Brightness is: ${state.listSettings.screensaverBrightness} (${state.listSettings.screensaverBrightness.toInteger()*100/255}%)"
+        log.debug "Fragment is: ${state.deviceInfo.currentFragment}"
+        log.debug "Screensaver Timeout is: ${state.listSettings.timeToScreensaverV2} seconds"
 
         sendEvent(name: "deviceSettings", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.listSettings)).toPrettyString():"disabled"), displayed: false)
         sendEvent(name: "deviceInfo", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.deviceInfo)).toPrettyString():"disabled"), displayed: false)
