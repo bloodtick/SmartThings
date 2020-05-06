@@ -39,7 +39,7 @@ metadata {
         attribute "wifiSignalLevel", "number"
         attribute "speechVolume", "number"
         attribute "screen", "string"
-        attribute "screenSaver", "string"
+        attribute "screensaver", "string"
         attribute "currentPage", "string"
         attribute "injectJsCode", "string"
         attribute "altitude", "number"
@@ -117,7 +117,7 @@ metadata {
         valueTile("timeToScreensaverV2", "device.timeToScreensaverV2", height: 1, width: 2, decoration: "flat") {
             state "default", label:'[ Screen Saver ]\n${currentValue} sec'
         }        
-        standardTile("screenSaver", "device.screenSaver", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
+        standardTile("screensaver", "device.screensaver", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
             state "off", label: 'ScrnSaver Off', action: "startScreensaver", icon: "https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/on-blue-3x.png", backgroundColor: "#ffffff"/*, nextState:"off"*/
             state "on", label: 'ScrnSaver On', action: "stopScreensaver", icon: "st.switches.switch.off", backgroundColor: "#ffffff"/*, nextState:"on"*/
         }        
@@ -149,7 +149,7 @@ metadata {
 
         main "switch"
         details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","currentFragment","wifiSignalLevel","screenBrightness","timeToScreensaverV2",
-                 "battery","screen","screenSaver","camshot","screenshot","refresh","listSettings","speechTest","speechVolume"])
+                 "battery","screen","screensaverscreenSaver","camshot","screenshot","refresh","listSettings","speechTest","speechVolume"])
     }
 }
 
@@ -440,8 +440,14 @@ def sendPostCmd() {
             log.debug "Exception $e on $hubAction"
         }
         //log.debug "hubAction: '${hubAction}'"
-        if (hubAction)
-        	sendHubCommand( hubAction )
+        if (hubAction) {
+            try {
+                sendHubCommand( hubAction )
+            }
+            catch (Exception e) {
+                log.debug "Exception $e on $sendHubCommand"
+            }
+        }
     }
     return event
 }
@@ -601,7 +607,7 @@ def update() {
         	state.deviceInfo.currentFragment="screensaver"
 
         sendEvent(name: "screen", value: (state.deviceInfo.isScreenOn?"on":"off"), displayed: false )        
-        sendEvent(name: "screenSaver", value: (state.deviceInfo.currentFragment=="screensaver"?"on":"off"), displayed: false )
+        sendEvent(name: "screensaver", value: (state.deviceInfo.currentFragment=="screensaver"?"on":"off"), displayed: false )
 
         if (state.deviceInfo.isScreenOn && state.deviceInfo.currentFragment=="main") {
 
@@ -621,9 +627,9 @@ def update() {
         }
 
         log.debug "Brightness is: ${state.deviceInfo.screenBrightness} (${state.deviceInfo.screenBrightness.toInteger()*100/255}%)"
-        log.debug "Screen On: ${state.deviceInfo.isScreenOn}"
+        log.debug "Screen is: ${(state.deviceInfo.isScreenOn?"on":"off")}"
         log.debug "Fragment is: ${state.deviceInfo.currentFragment}"
-        log.debug "Screensaver Timeout is: ${state.listSettings.timeToScreensaverV2} seconds"
+        log.debug "Screensaver timeout is: ${state.listSettings.timeToScreensaverV2} seconds"
 
         sendEvent(name: "deviceSettings", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.listSettings)).toPrettyString():"disabled"), displayed: false)
         sendEvent(name: "deviceInfo", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.deviceInfo)).toPrettyString():"disabled"), displayed: false)
