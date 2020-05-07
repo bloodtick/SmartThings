@@ -149,7 +149,7 @@ metadata {
 
         main "switch"
         details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","currentFragment","wifiSignalLevel","screenBrightness","timeToScreensaverV2",
-                 "battery","screen","screensaverscreenSaver","camshot","screenshot","refresh","listSettings","speechTest","speechVolume"])
+                 "battery","screen","screensaver","camshot","screenshot","refresh","listSettings","speechTest","speechVolume"])
     }
 }
 
