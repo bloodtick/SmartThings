@@ -22,7 +22,7 @@ import groovy.json.*
 import java.net.URLEncoder
 
 metadata {
-    definition (name: "Fully Kiosk Browser Device", namespace: "bloodtick", author: "SmartThings") {
+    definition (name: "Fully Kiosk Browser Device", namespace: "bloodtick", author: "SmartThings", minHubCoreVersion: '000.021.00001', mnmn: "SmartThings", vid: "generic-switch") {
         capability "Actuator"
         capability "Switch"
         capability "Switch Level"
@@ -137,18 +137,16 @@ metadata {
         standardTile("listSettings", "device.switch", inactiveLabel: false, height: 1, width: 2, decoration: "flat") {
             state "default", label:'Settings', action:"fetchSettings", icon:"st.secondary.refresh-icon"
         }
-        standardTile("camshot", "device.switch", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
-            state "default", label:'Camshot', action:"getCamshot", icon:"st.camera.take-photo"
+        standardTile("camshot", "device.image", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
+            state "default", label:'Camshot', action:"take", icon:"st.camera.take-photo"
         }
-        standardTile("screenshot", "device.switch", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
+        standardTile("screenshot", "device.image", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
             state "default", label:'Screenshot', action:"getScreenshot", icon:"st.motion.acceleration.inactive"
         }        
-        standardTile("image", "device.image", width: 1, height: 1, canChangeIcon: false, inactiveLabel: true, canChangeBackground: true) {
-            state "default", label: "", action: "", icon: "st.camera.dropcam-centered", backgroundColor: "#FFFFFF"
-        }
+        carouselTile("cameraDetails", "device.image", width: 2, height: 2) { }
 
         main "switch"
-        details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","currentFragment","wifiSignalLevel","screenBrightness","timeToScreensaverV2",
+        details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","cameraDetails","wifiSignalLevel","screenBrightness",
                  "battery","screen","screensaver","camshot","screenshot","refresh","listSettings","speechTest","speechVolume"])
     }
 }
@@ -158,10 +156,11 @@ preferences {
     input(name:"devicePort", type:"number", title: "Device IP Port", description: "Default is port 2323", defaultValue: "2323", required: false, displayDuringSetup: true)
     input(name:"devicePassword", type:"string", title:"Fully Kiosk Browser Password", required: true, displayDuringSetup: true)
     input(name:"deviceAllowScreenOff", type: "bool", title: "Allow Screen Off Command", description: "Diverts screen off and on commands to screensaver on and off commands. Defaulted to off for Fire tablets", defaultValue: "false", displayDuringSetup: false)
-    input(name:"devicePollRateSecs", type: "number", title: "Device Poll Rate (30-300 seconds)", description: "Default is 300 seconds", range: "30..300", defaultValue: "300", displayDuringSetup: false)
-    input(name:"deviceStoreDeviceConfig", type: "bool", title: "Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
+    input(name:"devicePollRateSecs", type: "number", title: "Device Poll Rate (30-600 seconds)", description: "Default is 300 seconds", range: "30..600", defaultValue: "300", displayDuringSetup: false)
     input(name:"deviceS3url", type:"string", title:"AWS Lambda URL (optional)", required: false, displayDuringSetup: false)
     input(name:"deviceS3key", type:"string", title:"AWS Lambda X-Api-Key (if required)", required: false, displayDuringSetup: false)
+    input(name:"deviceS3ret", type: "bool", title: "AWS Image Query", description: "Query AWS and fetch image into Smartthings Interface", defaultValue: "false", displayDuringSetup: false)
+	input(name:"deviceStoreDeviceConfig", type: "bool", title: "Debug: Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
 }
 
 def installed() {
@@ -172,6 +171,7 @@ def installed() {
     settings.deviceStoreDeviceConfig = false
     settings.deviceS3url =""
     settings.deviceS3key =""
+    settings.deviceS3ret = false
     sendEvent(name: "level", value: "50", displayed: false)
     sendEvent(name: "speechVolume", value: "50", displayed: false)
     log.debug "Executing 'installed()' with settings: ${settings}"
@@ -225,6 +225,7 @@ def setLevel(level) {
 }
 
 def take() {
+    log.debug "Executing 'take()'"
     getCamshot()
 }
 
@@ -728,32 +729,35 @@ def storeImageS3(strImageName) {
 }
 
 def fetchImageS3(strImageName) {
-    log.debug "Executing 'fetchImageS3()' to ${settings.deviceS3url}"
 
-    def params = [
-        uri: settings.deviceS3url+'/fetch',
-        body: JsonOutput.toJson([ 
-            'device': "${device.displayName}", 
-            'title': "${strImageName}", 
-        ])
-    ]
-    if(settings?.deviceS3key?.trim()) { // you don't need to use x-api-key with lambda. but good idea.
-        params['headers'] = [ "X-Api-Key": settings.deviceS3key ]
-    }
+    if (deviceS3ret) {
+        log.debug "Executing 'fetchImageS3()' to ${settings.deviceS3url}"
 
-    try {
-        httpPostJson(params) { resp ->
-            //resp.headers.each { log.debug "${it.name} : ${it.value}" }
-            //log.debug "response contentType: ${resp.contentType}"
-            //log.debug "response data: ${data}"
-            if (resp?.data?.body) {
-                log.debug "Fetched image: ${strImageName}"
-                storeImage(strImageName, (new ByteArrayInputStream(resp.data.body.decodeBase64())))
+        def params = [
+            uri: settings.deviceS3url+'/fetch',
+            body: JsonOutput.toJson([ 
+                'device': "${device.displayName}", 
+                'title': "${strImageName}", 
+            ])
+        ]
+        if(settings?.deviceS3key?.trim()) { // you don't need to use x-api-key with lambda. but good idea.
+            params['headers'] = [ "X-Api-Key": settings.deviceS3key ]
+        }
+
+        try {
+            httpPostJson(params) { resp ->
+                //resp.headers.each { log.debug "${it.name} : ${it.value}" }
+                //log.debug "response contentType: ${resp.contentType}"
+                //log.debug "response data: ${data}"
+                if (resp?.data?.body) {
+                    log.debug "Fetched image: ${strImageName}"
+                    storeImage(strImageName, (new ByteArrayInputStream(resp.data.body.decodeBase64())))
+                }
             }
         }
-    }
-    catch (e) {
-        log.error e
+        catch (e) {
+            log.error e
+        }
     }
 }
 
