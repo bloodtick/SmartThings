@@ -33,6 +33,7 @@ metadata {
         capability "Speech Synthesis"
         capability "Image Capture"
         capability "Touch Sensor"
+        capability "Motion Sensor"
 
         attribute "deviceInfo", "string"
         attribute "deviceSettings", "string"
@@ -160,7 +161,7 @@ preferences {
     input(name:"deviceS3url", type:"string", title:"AWS Lambda URL (optional)", required: false, displayDuringSetup: false)
     input(name:"deviceS3key", type:"string", title:"AWS Lambda X-Api-Key (if required)", required: false, displayDuringSetup: false)
     input(name:"deviceS3ret", type: "bool", title: "AWS Image Query", description: "Query AWS and fetch image into Smartthings Interface", defaultValue: "false", displayDuringSetup: false)
-	input(name:"deviceStoreDeviceConfig", type: "bool", title: "Debug: Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
+    input(name:"deviceStoreDeviceConfig", type: "bool", title: "Debug: Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
 }
 
 def installed() {
@@ -612,8 +613,10 @@ def update() {
 
         if (state.deviceInfo.isScreenOn && state.deviceInfo.currentFragment=="main") {
 
-            if (device.currentValue("switch") != "on")
-            	sendEvent(name: "switch", value: "on", descriptionText: "Fully Kiosk Browser is on")
+            if (device.currentValue("switch") != "on") {
+                sendEvent(name: "switch", value: "on", descriptionText: "Fully Kiosk Browser is on")
+                sendEvent(name: "motion", value: "active", displayed: false)
+            }
 
             def level = Math.round(state.deviceInfo.screenBrightness.toInteger()/2.55)
             if (device.currentValue("level") != "${level}")
@@ -623,8 +626,10 @@ def update() {
             nextRefresh = state.listSettings.timeToScreensaverV2.toInteger() + 1          
         }
         else {
-            if (device.currentValue("switch") != "off")
-            	sendEvent(name: "switch", value: "off", descriptionText: "Fully Kiosk Browser is off")            
+            if (device.currentValue("switch") != "off") {
+                sendEvent(name: "switch", value: "off", descriptionText: "Fully Kiosk Browser is off")
+                sendEvent(name: "motion", value: "inactive", displayed: false)
+            }
         }
 
         log.debug "Brightness is: ${state.deviceInfo.screenBrightness} (${state.deviceInfo.screenBrightness.toInteger()*100/255}%)"
