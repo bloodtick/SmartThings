@@ -518,8 +518,8 @@ def decodePostResponse(body) {
         log.debug "rx: ${state.rxCounter} :: deviceInfo"
         
         if (event==null || event.type!="deviceInfo")
-        	log.info "deviceInfo event was expected but was: ${event}"
-        
+        	log.info "deviceInfo event was expected but was: ${event}"        
+     
         state.deviceInfo = body 
     }
     else if (body?.timeToScreensaverV2) {
@@ -527,7 +527,7 @@ def decodePostResponse(body) {
         
         if (event==null || event.type!="listSettings")
         	log.info "listSettings event was expected but was: ${event}"
-        
+
         state.listSettings = body
     }
     else if (body?.status && body?.statustext && body.status.contains("OK")) {
@@ -541,8 +541,8 @@ def decodePostResponse(body) {
         switch (body.statustext) {
             case "Screesaver stopped": // misspelled return from Fully early versions
             case "Screensaver stopped":
-            	state.deviceInfo.currentFragment = "main"
-            	state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
+            	state.deviceInfo.currentFragment = "main" 
+            	if(state.deviceInfo?.screenBrightness && state.listSettings?.screenBrightness) state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
             	log.debug "${body.statustext}"
             	break;
             case "Switching the screen on":
@@ -550,8 +550,8 @@ def decodePostResponse(body) {
             	log.debug "${body.statustext}"
             	break;
             case "Screensaver started":
-            	state.deviceInfo.currentFragment = "screensaver"
-            	state.deviceInfo.screenBrightness = state.listSettings.screensaverBrightness.toInteger()
+            	state.deviceInfo?.currentFragment = "screensaver"
+            	if(state.deviceInfo?.screenBrightness && state.listSettings?.screenBrightness) state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
             	log.debug "${body.statustext}"
             	break;
             case "Switching the screen off":
@@ -603,10 +603,6 @@ def update() {
 
         def lastpoll_str = new Date().format("yyyy-MM-dd h:mm:ss a", location.timeZone)
         sendEvent(name: "lastPoll", value: lastpoll_str, displayed: false)
-
-        // bug in version 1.39 did not set currentFragment == "screensaver", this was my workaround. should be fixed in later and earlier versions
-        if ((settings.deviceAllowScreenOff==false) && state.deviceInfo.currentFragment=="main" && state.deviceInfo.screenBrightness.toInteger()==state.listSettings.screensaverBrightness.toInteger())
-        	state.deviceInfo.currentFragment="screensaver"
 
         sendEvent(name: "screen", value: (state.deviceInfo.isScreenOn?"on":"off"), displayed: false )        
         sendEvent(name: "screensaver", value: (state.deviceInfo.currentFragment=="screensaver"?"on":"off"), displayed: false )
