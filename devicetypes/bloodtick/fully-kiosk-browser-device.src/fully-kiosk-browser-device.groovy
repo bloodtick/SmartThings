@@ -147,7 +147,7 @@ metadata {
         carouselTile("cameraDetails", "device.image", width: 2, height: 2) { }
 
         main "switch"
-        details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","cameraDetails","wifiSignalLevel","screenBrightness",
+        details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","cameraDetails","wifiSignalLevel","currentFragment",
                  "battery","screen","screensaver","camshot","screenshot","refresh","listSettings","speechTest","speechVolume"])
     }
 }
@@ -541,23 +541,25 @@ def decodePostResponse(body) {
         switch (body.statustext) {
             case "Screesaver stopped": // misspelled return from Fully early versions
             case "Screensaver stopped":
-            	state.deviceInfo.currentFragment = "main" 
-            	if(state.deviceInfo?.screenBrightness && state.listSettings?.screenBrightness) state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
-            	log.debug "${body.statustext}"
-            	break;
+                state.deviceInfo.currentFragment = "main"
+                //log.debug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
+                if(!!state.deviceInfo && !state.listSettings?.screenBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
+                //log.debug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
+                break;
             case "Switching the screen on":
-            	state.deviceInfo.isScreenOn = true
-            	log.debug "${body.statustext}"
-            	break;
+                state.deviceInfo.isScreenOn = true
+                log.debug "${body.statustext}"
+                break;
             case "Screensaver started":
-            	state.deviceInfo?.currentFragment = "screensaver"
-            	if(state.deviceInfo?.screenBrightness && state.listSettings?.screenBrightness) state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
-            	log.debug "${body.statustext}"
-            	break;
-            case "Switching the screen off":
-            	state.deviceInfo.isScreenOn = false
-            	log.debug "${body.statustext}"
-            	break;            
+                state.deviceInfo?.currentFragment = "screensaver"
+                //log.debug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
+                if(!!state.deviceInfo && !state.listSettings?.screensaverBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screensaverBrightness.toInteger()
+                //log.debug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
+            break;
+                case "Switching the screen off":
+                state.deviceInfo.isScreenOn = false
+                log.debug "${body.statustext}"
+            break;            
             case "Saved":
             	if ( event && event.type=="setStringSetting" ) {
                 	def logit = "setStringSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value}"
@@ -614,10 +616,6 @@ def update() {
                 sendEvent(name: "motion", value: "active", displayed: false)
             }
 
-            def level = Math.round(state.deviceInfo.screenBrightness.toInteger()/2.55)
-            if (device.currentValue("level") != "${level}")
-            	sendEvent(name: "level", value: "${level}", descriptionText: "Screen Brightness is ${level}")
-
             if(state.listSettings.timeToScreensaverV2.toInteger()>0)
             nextRefresh = state.listSettings.timeToScreensaverV2.toInteger() + 1          
         }
@@ -636,6 +634,10 @@ def update() {
         sendEvent(name: "deviceSettings", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.listSettings)).toPrettyString():"disabled"), displayed: false)
         sendEvent(name: "deviceInfo", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.deviceInfo)).toPrettyString():"disabled"), displayed: false)
 
+        def level = Math.round(state.deviceInfo.screenBrightness.toInteger()/2.55)
+        if (device.currentValue("level") != "${level}")
+       		sendEvent(name: "level", value: "${level}", descriptionText: "Screen Brightness is ${level}")
+
         sendEvent(name: "injectJsCode", value: "${state.listSettings.injectJsCode}", displayed: false)
         sendEvent(name: "currentPage", value: "${state.deviceInfo.currentPage}", displayed: false)
         sendEvent(name: "screenBrightness", value: "${state.deviceInfo.screenBrightness}", displayed: false)
@@ -644,7 +646,6 @@ def update() {
         sendEvent(name: "isScreenOn", value: "${state.deviceInfo.isScreenOn?'true':'false'}", displayed: false)
         sendEvent(name: "currentFragment", value: "${state.deviceInfo.currentFragment}", displayed: false)
         sendEvent(name: "battery", value: "${state.deviceInfo.batteryLevel}", displayed: false)
-        sendEvent(name: "currentFragment", value: "${state.deviceInfo.currentFragment}", displayed: false)
         sendEvent(name: "wifiSignalLevel", value: "${state.deviceInfo.wifiSignalLevel}", displayed: false)
         sendEvent(name: "timeToScreensaverV2", value: "${state.listSettings.timeToScreensaverV2}", displayed: false)
         sendEvent(name: "altitude", value: "${state.deviceInfo.locationAltitude}", displayed: false)
