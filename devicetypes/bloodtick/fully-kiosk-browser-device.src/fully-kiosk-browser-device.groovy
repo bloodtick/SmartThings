@@ -1,28 +1,30 @@
 /**
- *  Copyright 2019 SmartThings
- *
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- *  in compliance with the License. You may obtain a copy of the License at:
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
- *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
- *  for the specific language governing permissions and limitations under the License.
- *
- *  Fully Kiosk Browser Device
- *  Thanks to Arn Burkhoff similar driver concerning TTS functions. 
- *
- *  Update: Bloodtick Jones
- *  Date: 2019-08-24
- *
- */
+*  Copyright 2020 Bloodtick
+*
+*  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+*  in compliance with the License. You may obtain a copy of the License at:
+*
+*      http://www.apache.org/licenses/LICENSE-2.0
+*
+*  Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
+*  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+*  for the specific language governing permissions and limitations under the License.
+*
+*  Fully Kiosk Browser Device
+*  Thanks to Arn Burkhoff similar driver concerning TTS functions. 
+*
+*  Update: Bloodtick Jones
+*  Date: 2020-09-05
+*
+*/
 
 import groovy.json.*
 import java.net.URLEncoder
 
+Boolean isST() { return (getPlatform() == "SmartThings") }
+
 metadata {
-    definition (name: "Fully Kiosk Browser Device", namespace: "bloodtick", author: "SmartThings", minHubCoreVersion: '000.021.00001', mnmn: "SmartThings", vid: "generic-switch") {
+    definition (name: "Fully Kiosk Browser Device", namespace: "bloodtick", author: "Hubitat/SmartThings", ocfDeviceType: "oic.d.switch") {
         capability "Actuator"
         capability "Switch"
         capability "Switch Level"
@@ -49,6 +51,7 @@ metadata {
         attribute "s3url", "string"
         attribute "s3key", "string"
         attribute "touch", "string"
+        attribute "status", "string"
 
         command "screenOn"
         command "screenOff"
@@ -91,6 +94,8 @@ metadata {
             }
         }
 
+        carouselTile("cameraDetails", "device.image", width: 2, height: 2) { } // Not Compatible with Hubitat
+
         valueTile("currentIP", "device.currentIP", height: 1, width: 3, decoration: "flat") {
             state "default", label:'[ Current IP ]\n${currentValue}'
         }
@@ -106,8 +111,8 @@ metadata {
         valueTile("isScreenOn", "device.isScreenOn", height: 1, width: 2, decoration: "flat") {
             state "default", label:'[ Screen On ]\n${currentValue}'
         }
-        valueTile("currentFragment", "device.currentFragment", height: 1, width: 2, decoration: "flat") {
-            state "default", label:'[ Display ]\n${currentValue}'
+        valueTile("isInScreensaver", "device.isInScreensaver", height: 1, width: 2, decoration: "flat") {
+            state "default", label:'[ Screen Saver ]\n${currentValue}'
         }
         valueTile("battery", "device.battery", height: 1, width: 2, decoration: "flat") {
             state "default", label:'[ Battery ]\n${currentValue}%'
@@ -144,10 +149,9 @@ metadata {
         standardTile("screenshot", "device.image", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
             state "default", label:'Screenshot', action:"getScreenshot", icon:"st.motion.acceleration.inactive"
         }        
-        carouselTile("cameraDetails", "device.image", width: 2, height: 2) { }
 
         main "switch"
-        details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","cameraDetails","wifiSignalLevel","currentFragment",
+        details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","cameraDetails","wifiSignalLevel","isInScreensaver",
                  "battery","screen","screensaver","camshot","screenshot","refresh","listSettings","speechTest","speechVolume"])
     }
 }
@@ -162,6 +166,7 @@ preferences {
     input(name:"deviceS3key", type:"string", title:"AWS Lambda X-Api-Key (if required)", required: false, displayDuringSetup: false)
     input(name:"deviceS3ret", type: "bool", title: "AWS Image Query", description: "Query AWS and fetch image into Smartthings Interface", defaultValue: "false", displayDuringSetup: false)
     input(name:"deviceStoreDeviceConfig", type: "bool", title: "Debug: Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
+    input(name:"deviceLogEnable", type: "bool", title: "Enable debug logging", defaultValue: false) 
 }
 
 def installed() {
@@ -173,32 +178,37 @@ def installed() {
     settings.deviceS3url =""
     settings.deviceS3key =""
     settings.deviceS3ret = false
+    settings.deviceLogEnable = false
     sendEvent(name: "level", value: "50", displayed: false)
     sendEvent(name: "speechVolume", value: "50", displayed: false)
-    log.debug "Executing 'installed()' with settings: ${settings}"
+    logDebug "Executing 'installed()' with settings: ${settings}"
     initialize()
 }
 
 def updated() {
-    log.debug "Executing 'updated()' with new preferences: ${settings}"
+    logDebug "Executing 'updated()' with new preferences: ${settings}"
     initialize()
 }
 
 def initialize() {
-    log.debug "Executing 'initialize()'"
+    logInfo "Executing 'initialize()'"
     unschedule()
     sendEvent(name: "switch", value: "off", displayed: false)
     sendEvent(name: "battery", value: "100", displayed: false)
     setS3url( settings.deviceS3url )
     setS3key( settings.deviceS3key )
+
     if (device?.hub?.hardwareID ) {
-        sendEvent(name: "DeviceWatch-Enroll", value: [protocol: "lan", scheme: "untracked", hubHardwareId: device.hub.hardwareID].encodeAsJson(), displayed: false)
+        sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "lan", scheme: "untracked", hubHardwareId: device.hub.hardwareID]), displayed: false)
         sendEvent(name: "checkInterval", value: 1920, data: [protocol: "lan", hubHardwareId: device.hub.hardwareID], displayed: false)
     } else {
-        log.info "This device is not yet assigned to a SmartThings Hub"
+        logInfo "This device is not assigned to a SmartThings Hub"
     }
+
     state.deviceInfo = ""
     state.listSettings = ""
+    state.eventListRunning = false
+    state.eventList = []
 
     if (settings.deviceIp && settings.devicePort && settings.devicePassword) {
         sendEvent(name: "currentIP", value: "${settings.deviceIp}:${settings.devicePort}", displayed: false)
@@ -226,7 +236,7 @@ def setLevel(level) {
 }
 
 def take() {
-    log.debug "Executing 'take()'"
+    logDebug "Executing 'take()'"
     getCamshot()
 }
 
@@ -243,7 +253,7 @@ def getCamshot() {
     if (state?.listSettings?.remoteAdmin && state?.listSettings?.remoteAdminCamshot && state?.listSettings?.motionDetection) {
         sendGenericCommand("getCamshot")
     } else {
-        log.debug "getCamshot not configured - remoteAdmin:${state?.listSettings?.remoteAdmin} remoteAdminCamshot:${state?.listSettings?.remoteAdminCamshot} motionDetection:${state?.listSettings?.motionDetection}"
+        logDebug "getCamshot not configured - remoteAdmin:${state?.listSettings?.remoteAdmin} remoteAdminCamshot:${state?.listSettings?.remoteAdminCamshot} motionDetection:${state?.listSettings?.motionDetection}"
     }
 }
 
@@ -252,7 +262,7 @@ def getScreenshot() {
         if (device.currentValue("switch") != "on") on() // must be 'on' otherwise you get the screensaver
         sendGenericCommand("getScreenshot")
     } else {
-        log.debug "getScreenshot not configured - remoteAdmin:${state?.listSettings?.remoteAdmin} remoteAdminScreenshot:${state?.listSettings?.remoteAdminScreenshot}"
+        logDebug "getScreenshot not configured - remoteAdmin:${state?.listSettings?.remoteAdmin} remoteAdminScreenshot:${state?.listSettings?.remoteAdminScreenshot}"
     }
 }
 
@@ -349,26 +359,27 @@ def getBooleanSetting(String key, String obj = 'listSettings') {
 }
 
 def refresh() {
-    log.debug "Executing 'refresh()'"
+    logDebug "Executing 'refresh()'"
     fetchInfo()
 }
 
 def poll() {
-    log.debug "Executing 'poll()'"
+    logDebug "Executing 'poll()'"
     fetchInfo()
 }
 
 def ping() {
-    log.debug "Executing 'ping()'"
+    logDebug "Executing 'ping()'"
     fetchSettings()
 }
 
 def clrEvents() {
     if(state.eventList) {
-        log.debug "Clearing command queue: ${state.eventList}"
+        logInfo "Clearing command queue: ${state.eventList}"
         sendEvent(name: "info", value: "", descriptionText: "Something went wrong and ${state.eventList.size()} command(s) deleted", isStateChange: true)
     }
     state.eventList = []
+    state.eventListRunning = false
     state.counter=0
     state.txCounter=0
     state.rxCounter=0
@@ -376,42 +387,48 @@ def clrEvents() {
 
 def addEvent(event) {
     state.counter=state.counter+1
-    def map = [type:event[0], key:event[1], value:event[2], postCmd:event[3], sequence:state.counter]
-    state.eventList.add(map)
-    //log.debug "Event list is: ${state.eventList}"
+    def eventList = state.eventList
+    eventList << [type:event[0], key:event[1], value:event[2], postCmd:event[3], sequence:state.counter]
+    logTrace "Event list is: ${state.eventList}"
     runIn(20, clrEvents) // watchdog: needs to be less then settings.devicePollRateSecs
-    if (state.eventList.size()==1)
-    	sendPostCmd()
+    if (state.eventListRunning==false)
+    sendPostCmd()
     return true
 }
 
 def pullEvent() {
-    def event
-    if (state.eventList && !state.eventList.isEmpty()) {
-        event = state.eventList.remove(0)
+    def eventList = state.eventList    
+    if (eventList.size() == 0) {
+        state.eventListRunning==false
+        return
     }
-    //log.debug "Event list is: ${state.eventList} after pulling: ${event}"    
+    def event = eventList[0]
+    eventList.remove(0)
+    logTrace "Event list is: ${state.eventList} after pulling: ${event}"    
     return event
 }
 
 def peakEvent() {
-    def event
-    if (state.eventList && !state.eventList.isEmpty()) {
-        event = state.eventList.get(0)
+    def eventList = state.eventList    
+    if (eventList.size() == 0) {
+        state.eventListRunning==false
+        return
     }
-    //log.debug "Event list is: ${state.eventList} after peaking: ${event}"    
+    def event = eventList[0]
+    logTrace "Event list is: ${state.eventList} after peaking: ${event}"    
     return event
 }
 
 def runPostCmd() {
     if (peakEvent()) {
-        log.info "Running sendPostCmd again since queue was not cleared"
+        logInfo "Running sendPostCmd again since queue was not cleared"
         state.txCounter=-1
     }        
     sendPostCmd()
 }
 
 def sendPostCmd() {
+    state.eventListRunning==true
     def event = peakEvent()
     // have I seen this event already?
     if (event && state.txCounter!=event.sequence) {
@@ -422,45 +439,46 @@ def sendPostCmd() {
         runIn(10, runPostCmd) 
 
         def cmd = "?type=json&password=${devicePassword}&" + event.postCmd
-        log.debug "tx: ${state.txCounter} :: (${cmd})"
+        logDebug "tx: ${state.txCounter} :: (${cmd})"
 
         if (device.currentValue("status") != "offline")
-        	runIn(30, setOffline)
+        runIn(30, setOffline)
         if (settings.deviceIp!=null && settings.devicePort!=null)
-        	setupNetworkID() // leave it here. 
+        setupNetworkID() // leave it here.
 
         def hubAction 	
         try {
-            hubAction = new physicalgraph.device.HubAction([
+            def param = [
                 method: "POST",
                 path: cmd,
                 headers: [HOST: "${settings.deviceIp}:${settings.devicePort}"] + ["X-Request-ID": UUID.randomUUID().toString()]] //nanohttpd doesn't seem to support X-Request-ID
-                                                          )
-            if(event.key=="getCamshot" || event.key=="getScreenshot") { hubAction.options = [outputMsgToS3:true] }
+            hubAction = (isST()) ? physicalgraph.device.HubAction.newInstance(param) : hubitat.device.HubAction.newInstance(param)
+            if(event.key=="getCamshot" || event.key=="getScreenshot") { if (isST()) hubAction.options = [outputMsgToS3:true] else hubAction.options = [callback:parseImageHubitat] } 
         }
         catch (Exception e) {
-            log.debug "Exception $e on $hubAction"
+            logError "sendPostCmd() $e on $hubAction"
         }
-        //log.debug "hubAction: '${hubAction}'"
+        //logDebug "hubAction: '${hubAction}'"
         if (hubAction) {
             try {
                 sendHubCommand( hubAction )
             }
             catch (Exception e) {
-                log.debug "Exception $e on $sendHubCommand"
+                logError "sendPostCmd() $e on $sendHubCommand"
             }
         }
+
     }
     return event
 }
 
 def parse(String description) {
     if ( description=="updated" ) {
-        log.debug "description: '${description}'"
+        logDebug "description: '${description}'"
         return
     }    
     def msg = parseLanMessage(description)
-    //log.debug "parsed lan msg: '${msg}'"
+    //logDebug "parsed lan msg: '${msg}'"
     if (msg?.header && msg?.body) {
         def headerString = msg.header        
         def bodyString = msg.body
@@ -468,17 +486,16 @@ def parse(String description) {
 
         if (headerString.contains("200 OK")) {
             unschedule("setOffline")
-            // everything was healthy. tell smartthings & decode.
             setOnline()
             decodePostResponse(body)   
         } else {
-            log.error "parse() header did not respond '200 OK': ${headerString}"
+            logError "parse() header did not respond '200 OK': ${headerString}"
         }       
     } else if (msg?.tempImageKey) {
         unschedule("setOffline")
-        decodeImageResponse(description)
+        parseImageSmartThings(description)
     } else {
-        log.error "parse() parseLanMessage could not decode: ${msg}"
+        logError "parse() parseLanMessage could not decode: ${msg}"
         pullEvent()
     }    
 
@@ -486,96 +503,134 @@ def parse(String description) {
     sendPostCmd()
 }
 
-def decodeImageResponse(String description) {
+def parseImageSmartThings(String description) {
     def event = pullEvent()
     state.rxCounter=state.rxCounter+1
 
     def map = stringToMap(description)
+    logDebug "parseImageSmartThings description: ${map}"
+
     if (map?.tempImageKey) {
         try {
-            log.debug "Executing 'decodeImageResponse()': ${map.tempImageKey}"
             def strImageName = (java.util.UUID.randomUUID().toString().replaceAll('-', ''))
-            log.debug "rx: ${state.rxCounter} :: image name: ${strImageName}"
+            strImageName += event.key=="getScreenshot" ? '.png' : '.jpg'
+            logDebug "rx: ${state.rxCounter} :: image name: ${strImageName} tempImageKey: ${map.tempImageKey}"
             storeTemporaryImage(map.tempImageKey, strImageName)
-            if(settings?.deviceS3url?.trim()) {
-                storeImageS3(strImageName)
+            logInfo "${device.displayName} captured image '${strImageName}'"
+            if(settings?.deviceS3url?.trim() && event.key=="getCamshot") {
+                def strBase64Image = getImage(strImageName).bytes.encodeBase64()
+                storeImageS3(strBase64Image)
             }
         } catch (Exception e) {
-            log.error e
+            logError "parseImageSmartThings() $e"
         }
     } else if (map.error) {
-        log.error "Error: ${map.error}"
+        logError "Error: ${map.error}"
     }
 }
 
-def decodePostResponse(body) {
-    log.debug "Executing 'decodePostResponse()'"
-    
+def parseImageHubitat(response) {    
     def event = pullEvent()
     state.rxCounter=state.rxCounter+1
-       
-    if (body.isScreenOn!=null) {    	
-        log.debug "rx: ${state.rxCounter} :: deviceInfo"
-        
+
+    def map = parseLanMessage( response.description )
+    logDebug "parseImageHubitat headers: ${map.headers}"
+
+    if( map?.headers?.'Content-Type'.contains("image/jpeg") || map?.headers?.'Content-Type'.contains("image/png")) {
+        unschedule("setOffline")
+        setOnline()        
+        try
+        {
+            def strImageName = (java.util.UUID.randomUUID().toString().replaceAll('-', ''))
+            strImageName += map?.headers?.'Content-Type'.contains("image/jpeg") ? '.jpg' : '.png'
+            logDebug "rx: ${state.rxCounter} :: image name: ${strImageName}"            
+            // storeTemporaryImage( map.tempImageKey, strImageName )
+            byte[] imageBytes = parseDescriptionAsMap(response.description).body.decodeBase64()
+            logInfo "NOTICE: Image and screen shots to not work. Still need someplace to put the image with size: ${imageBytes.size()}"            
+            logInfo "${device.displayName} captured image '${strImageName}'"
+            if(settings?.deviceS3url?.trim() && event.key=="getCamshot") {
+                def strBase64Image = parseDescriptionAsMap(response.description).body
+                storeImageS3(strBase64Image)
+            }
+        }
+        catch( Exception e )
+        {
+            logError "parseImageHubitat() $e"
+        }
+    }
+
+    runIn(20, clrEvents) // watchdog: needs to be less then settings.devicePollRateSecs
+    sendPostCmd()
+}
+
+def decodePostResponse(body) {
+    logDebug "Executing 'decodePostResponse()'"
+
+    def event = pullEvent()
+    state.rxCounter=state.rxCounter+1
+
+    if (body.screenOn!=null) {    	
+        logDebug "rx: ${state.rxCounter} :: deviceInfo"
+
         if (event==null || event.type!="deviceInfo")
-        	log.info "deviceInfo event was expected but was: ${event}"        
-     
+        logInfo "deviceInfo event was expected but was: ${event}"        
+
         state.deviceInfo = body 
     }
     else if (body?.timeToScreensaverV2) {
-    	log.debug "rx: ${state.rxCounter} :: listSettings"
-        
+        logDebug "rx: ${state.rxCounter} :: listSettings"
+
         if (event==null || event.type!="listSettings")
-        	log.info "listSettings event was expected but was: ${event}"
+        logInfo "listSettings event was expected but was: ${event}"
 
         state.listSettings = body
     }
     else if (body?.status && body?.statustext && body.status.contains("OK")) {
-		log.debug "rx: ${state.rxCounter} :: ${body.statustext}"
+        logDebug "rx: ${state.rxCounter} :: ${body.statustext}"
 
         if (event==null || (event.type!="command" && !event.type.contains("Setting"))) {
-        	log.info "command or setting event was expected but was: ${event}"
+            logInfo "command or setting event was expected but was: ${event}"
             runIn(2, fetchSettings)
         }
-        //log.debug "Processing event: ${body} with event: ${event}"
+        logTrace "Processing event: ${body} with event: ${event}"
         switch (body.statustext) {
             case "Screesaver stopped": // misspelled return from Fully early versions
             case "Screensaver stopped":
-                state.deviceInfo.currentFragment = "main"
-                //log.debug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
-                if(!!state.deviceInfo && !state.listSettings?.screenBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
-                //log.debug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
-                break;
-            case "Switching the screen on":
-                state.deviceInfo.isScreenOn = true
-                log.debug "${body.statustext}"
-                break;
-            case "Screensaver started":
-                state.deviceInfo?.currentFragment = "screensaver"
-                //log.debug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
-                if(!!state.deviceInfo && !state.listSettings?.screensaverBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screensaverBrightness.toInteger()
-                //log.debug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
+            state.deviceInfo.isInScreensaver = false
+            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
+            if(!!state.deviceInfo && !state.listSettings?.screenBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
+            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
             break;
-                case "Switching the screen off":
-                state.deviceInfo.isScreenOn = false
-                log.debug "${body.statustext}"
+            case "Switching the screen on":
+            state.deviceInfo.screenOn = true
+            logDebug "${body.statustext}"
+            break;
+            case "Screensaver started":
+            state.deviceInfo.isInScreensaver = true
+            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
+            if(!!state.deviceInfo && !state.listSettings?.screensaverBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screensaverBrightness.toInteger()
+            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
+            break;
+            case "Switching the screen off":
+            state.deviceInfo.screenOn = false
+            logDebug "${body.statustext}"
             break;            
             case "Saved":
-            	if ( event && event.type=="setStringSetting" ) {
-                	def logit = "setStringSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value}"
-                    if(state.listSettings."${event.key}" instanceof Integer) {
-                    	state.listSettings."${event.key}" = Integer.valueOf(event.value)
-                        log.debug "${logit} as Integer"
-                    }
-                    else if(state.listSettings."${event.key}" instanceof String) {
-                    	state.listSettings."${event.key}" = String.valueOf(event.value)
-                        log.debug "${logit} as String"
-                    }
-                    else log.error "${logit} was not completed"
-                    break;
-                } else          	
-             	if ( event && event.type=="setBooleanSetting" ) {
-                	log.debug "setBooleanSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value} as Boolean"
+            if ( event && event.type=="setStringSetting" ) {
+                def logit = "setStringSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value}"
+                if(state.listSettings."${event.key}" instanceof Integer) {
+                    state.listSettings."${event.key}" = Integer.valueOf(event.value)
+                    logDebug "${logit} as Integer"
+                }
+                else if(state.listSettings."${event.key}" instanceof String) {
+                    state.listSettings."${event.key}" = String.valueOf(event.value)
+                    logDebug "${logit} as String"
+                }
+                else logError "${logit} was not completed"
+                break;
+            } else          	
+                if ( event && event.type=="setBooleanSetting" ) {
+                    logDebug "setBooleanSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value} as Boolean"
                     state.listSettings."${event.key}" = Boolean.valueOf(event.value)
                     break;
                 }
@@ -584,16 +639,16 @@ def decodePostResponse(body) {
             default:
                 // i contacted fully support to ask about a generic code reply or sequence_id to validate because handling weird return calls
                 // are ackward. they told me it was too difficult and they didnt understand why i needed them. oh well. 
-                log.debug "statustext: '${body.statustext}' from event: ${event.type}:${event.key}"
+                logDebug "statustext: '${body.statustext}' from event: ${event.type}:${event.key}"
             break;
         }
     }
     else {
-        log.error "unhandled event: ${event} with reponse:'${body}'"
+        logError "unhandled event: ${event} with reponse:'${body}'"
     }
 
     def nextRefresh = update()
-    log.debug "Refresh in ${nextRefresh} seconds"
+    logDebug "Refresh in ${nextRefresh} seconds"
     runIn(nextRefresh, refresh)
 }
 
@@ -606,14 +661,15 @@ def update() {
         def lastpoll_str = new Date().format("yyyy-MM-dd h:mm:ss a", location.timeZone)
         sendEvent(name: "lastPoll", value: lastpoll_str, displayed: false)
 
-        sendEvent(name: "screen", value: (state.deviceInfo.isScreenOn?"on":"off"), displayed: false )        
-        sendEvent(name: "screensaver", value: (state.deviceInfo.currentFragment=="screensaver"?"on":"off"), displayed: false )
+        sendEvent(name: "screen", value: (state.deviceInfo.screenOn?"on":"off"), displayed: false )        
+        sendEvent(name: "screensaver", value: (state.deviceInfo.isInScreensaver?"on":"off"), displayed: false )
 
-        if (state.deviceInfo.isScreenOn && state.deviceInfo.currentFragment=="main") {
+        if (state.deviceInfo.screenOn && !state.deviceInfo.isInScreensaver) {
 
             if (device.currentValue("switch") != "on") {
                 sendEvent(name: "switch", value: "on", descriptionText: "Fully Kiosk Browser is on")
                 sendEvent(name: "motion", value: "active", displayed: false)
+                logInfo "${device.displayName} is on"
             }
 
             if(state.listSettings.timeToScreensaverV2.toInteger()>0)
@@ -623,32 +679,33 @@ def update() {
             if (device.currentValue("switch") != "off") {
                 sendEvent(name: "switch", value: "off", descriptionText: "Fully Kiosk Browser is off")
                 sendEvent(name: "motion", value: "inactive", displayed: false)
+                logInfo "${device.displayName} is off"
             }
         }
 
-        log.debug "Brightness is: ${state.deviceInfo.screenBrightness} (${state.deviceInfo.screenBrightness.toInteger()*100/255}%)"
-        log.debug "Screen is: ${(state.deviceInfo.isScreenOn?"on":"off")}"
-        log.debug "Fragment is: ${state.deviceInfo.currentFragment}"
-        log.debug "Screensaver timeout is: ${state.listSettings.timeToScreensaverV2} seconds"
+        logDebug "Brightness is: ${state.deviceInfo.screenBrightness} (${state.deviceInfo.screenBrightness.toInteger()*100/255}%)"
+        logDebug "Screen is: ${(state.deviceInfo.screenOn?"on":"off")}"
+        logDebug "Screensaver is: ${(state.deviceInfo.isInScreensaver?"on":"off")}"
+        logDebug "Screensaver timeout is: ${state.listSettings.timeToScreensaverV2} seconds"
 
         sendEvent(name: "deviceSettings", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.listSettings)).toPrettyString():"disabled"), displayed: false)
         sendEvent(name: "deviceInfo", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.deviceInfo)).toPrettyString():"disabled"), displayed: false)
 
         def level = Math.round(state.deviceInfo.screenBrightness.toInteger()/2.55)
         if (device.currentValue("level") != "${level}")
-       		sendEvent(name: "level", value: "${level}", descriptionText: "Screen Brightness is ${level}")
+        sendEvent(name: "level", value: "${level}", descriptionText: "Screen Brightness is ${level}")
 
         sendEvent(name: "injectJsCode", value: "${state.listSettings.injectJsCode}", displayed: false)
         sendEvent(name: "currentPage", value: "${state.deviceInfo.currentPage}", displayed: false)
         sendEvent(name: "screenBrightness", value: "${state.deviceInfo.screenBrightness}", displayed: false)
         sendEvent(name: "battery", value: "${state.deviceInfo.batteryLevel}", displayed: false)
         sendEvent(name: "appVersionName", value: "${state.deviceInfo.appVersionName}", displayed: false)
-        sendEvent(name: "isScreenOn", value: "${state.deviceInfo.isScreenOn?'true':'false'}", displayed: false)
-        sendEvent(name: "currentFragment", value: "${state.deviceInfo.currentFragment}", displayed: false)
+        sendEvent(name: "isScreenOn", value: "${state.deviceInfo.screenOn?'true':'false'}", displayed: false)
+        sendEvent(name: "isInScreensaver", value: "${state.deviceInfo.isInScreensaver}", displayed: false)
         sendEvent(name: "battery", value: "${state.deviceInfo.batteryLevel}", displayed: false)
         sendEvent(name: "wifiSignalLevel", value: "${state.deviceInfo.wifiSignalLevel}", displayed: false)
         sendEvent(name: "timeToScreensaverV2", value: "${state.listSettings.timeToScreensaverV2}", displayed: false)
-        sendEvent(name: "altitude", value: "${state.deviceInfo.locationAltitude}", displayed: false)
+        sendEvent(name: "altitude", value: "${state.deviceInfo.altitude}", displayed: false)
         sendEvent(name: "latitude", value: "${state.deviceInfo.locationLatitude}", displayed: false)
         sendEvent(name: "longitude", value: "${state.deviceInfo.locationLongitude}", displayed: false)
     }
@@ -656,17 +713,23 @@ def update() {
 }
 
 def setOnline() {
-    sendEvent(name: "status", value: "online", displayed: true)
-    sendEvent(name: "healthStatus", value: "online", displayed: false)
-    sendEvent(name: "DeviceWatch-DeviceStatus", value: "online", displayed: false)
+    logDebug "Executing 'setOnline()'"
+    if(device.currentValue("status")!="online") {
+        logInfo "${device.displayName} is ${device.currentValue("status")}"
+        sendEvent(name: "status", value: "online", displayed: true)
+        sendEvent(name: "healthStatus", value: "online", displayed: false)
+        sendEvent(name: "DeviceWatch-DeviceStatus", value: "online", displayed: false)
+    }
 }
 
 def setOffline() {
-    log.debug "Executing 'setOffline()'"
-    //sendEvent(name: "switch", value: "offline", descriptionText: "The device is offline")
-    sendEvent(name: "status", value: "offline", displayed: true, isStateChange: true)
-    sendEvent(name: "healthStatus", value: "offline", displayed: false, isStateChange: true)
-    sendEvent(name: "DeviceWatch-DeviceStatus", value: "offline", displayed: false, isStateChange: true)
+    logDebug "Executing 'setOffline()'"
+    if(device.currentValue("status")!="offline") {
+        logInfo "${device.displayName} is ${device.currentValue("status")}"
+        sendEvent(name: "status", value: "offline", displayed: true, isStateChange: true)
+        sendEvent(name: "healthStatus", value: "offline", displayed: false, isStateChange: true)
+        sendEvent(name: "DeviceWatch-DeviceStatus", value: "offline", displayed: false, isStateChange: true)
+    }
 }
 
 def setupNetworkID() {
@@ -674,7 +737,7 @@ def setupNetworkID() {
     def porthex = convertPortToHex(settings.devicePort).toUpperCase()
     if("$hosthex:$porthex" != device.deviceNetworkId) {
         device.deviceNetworkId = "$hosthex:$porthex"
-        log.info "Executing 'setupNetworkID()' setting to $hosthex:$porthex"
+        logInfo "Executing 'setupNetworkID()' setting to $hosthex:$porthex"
     }
 }
 
@@ -699,10 +762,9 @@ def setS3key(value) {
     sendEvent(name: "s3key", value: value, displayed: false)
 }
 
-def storeImageS3(strImageName) {
-    log.debug "Executing 'storeImageS3()' to ${settings.deviceS3url}"
+def storeImageS3(strBase64Image) {
+    logDebug "Executing 'storeImageS3()' to ${settings.deviceS3url}"
 
-    def strBase64Image = getImage(strImageName).bytes.encodeBase64()
     def params = [
         uri: settings.deviceS3url+'/store',
         body: JsonOutput.toJson([ 
@@ -720,20 +782,20 @@ def storeImageS3(strImageName) {
 
     try {
         httpPostJson(params) { resp ->
-            //resp.headers.each { log.debug "${it.name} : ${it.value}" }
-            //log.debug "response contentType: ${resp.contentType}"
-            log.debug "response data: ${resp.data}"
+            resp.headers.each { logTrace "${it.name} : ${it.value}" }
+            logTrace "response contentType: ${resp.contentType}"
+            logDebug "response data: ${resp.data}"
         }
     }
     catch (e) {
-        log.error e
+        logError e
     }
 }
 
 def fetchImageS3(strImageName) {
 
     if (deviceS3ret) {
-        log.debug "Executing 'fetchImageS3()' to ${settings.deviceS3url}"
+        logDebug "Executing 'fetchImageS3()' to ${settings.deviceS3url}"
 
         def params = [
             uri: settings.deviceS3url+'/fetch',
@@ -748,20 +810,46 @@ def fetchImageS3(strImageName) {
 
         try {
             httpPostJson(params) { resp ->
-                //resp.headers.each { log.debug "${it.name} : ${it.value}" }
-                //log.debug "response contentType: ${resp.contentType}"
-                //log.debug "response data: ${data}"
+                resp.headers.each { logTrace "${it.name} : ${it.value}" }
+                logTrace "response contentType: ${resp.contentType}"
+                //logTrace "response data: ${data}"
                 if (resp?.data?.body) {
-                    log.debug "Fetched image: ${strImageName}"
                     storeImage(strImageName, (new ByteArrayInputStream(resp.data.body.decodeBase64())))
+                    logInfo "${device.displayName} fetched S3 image '${strImageName}'"
                 }
             }
         }
         catch (e) {
-            log.error e
+            logError e
         }
     }
 }
+
+private getPlatform() {
+    String p = "SmartThings"
+    if(state?.hubPlatform == null) {
+        try { [dummy: "dummyVal"]?.encodeAsJson(); } catch (e) { p = "Hubitat" }
+        // if (location?.hubs[0]?.id?.toString()?.length() > 5) { p = "SmartThings" } else { p = "Hubitat" }
+        state?.hubPlatform = p
+        logDebug ("hubPlatform: (${state?.hubPlatform})")
+    }
+    return state?.hubPlatform
+}
+
+
+private parseDescriptionAsMap( description )
+{
+    description.split(",").inject([:]) { map, param ->
+        def nameAndValue = param.split(":")
+        map += [(nameAndValue[0].trim()):nameAndValue[1].trim()]
+    }
+}
+
+private logInfo(msg)  { log.info "${msg}" }
+private logDebug(msg) { if(settings?.deviceLogEnable == true) { log.debug "${msg}" } }
+private logTrace(msg) { if(settings?.deviceStoreDeviceConfig) { log.trace "${msg}" } }
+private logWarn(msg)  { log.warn  "${msg}" } 
+private logError(msg) { log.error  "${msg}" }
 
 // Stores the MAC address as the device ID so that it can talk to SmartThings
 // Not used today. Maybe use to support dynamic DHCP. Today just static works.
@@ -771,6 +859,6 @@ def setNetworkAddress() {
     def hex = "$settings.mac".toUpperCase().replaceAll(':', '')
     if (device.deviceNetworkId != "$hex") {
         device.deviceNetworkId = "$hex"
-        log.debug "Device Network Id set to ${device.deviceNetworkId}"
+        logDebug "Device Network Id set to ${device.deviceNetworkId}"
     }
 }
