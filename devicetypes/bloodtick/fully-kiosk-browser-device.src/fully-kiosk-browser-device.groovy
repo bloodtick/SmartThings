@@ -14,12 +14,18 @@
 *  Thanks to Arn Burkhoff similar driver concerning TTS functions. 
 *
 *  Update: Bloodtick Jones
-*  Date: 2020-09-05
+*  Date: 2020-09-07
+*
+*  1.0.00 2020-09-07 First release to support Hubitat. Must have Fully 1.40.3 or greater to use becuase of new command struture.
+*  1.0.01 2020-09-08 Added runIn delay in parse for sendPostCmd
 *
 */
 
 import groovy.json.*
 import java.net.URLEncoder
+
+private getVersionNum()   { return "1.0.01" }
+private getVersionLabel() { return "Fully Kiosk Browser Device, version ${versionNum}" }
 
 Boolean isST() { return (getPlatform() == "SmartThings") }
 
@@ -94,7 +100,7 @@ metadata {
             }
         }
 
-        carouselTile("cameraDetails", "device.image", width: 2, height: 2) { } // Not Compatible with Hubitat
+        carouselTile("cameraDetails", "device.image", width: 2, height: 2) { } // Not Compatible with Hubitat. Uncomment for SmartThings Classic UI.
 
         valueTile("currentIP", "device.currentIP", height: 1, width: 3, decoration: "flat") {
             state "default", label:'[ Current IP ]\n${currentValue}'
@@ -335,11 +341,13 @@ def sendGenericCommand(value) {
 }
 
 def setStringSetting(String key, String value, nextRefresh=1) {
+    logDebug "Executing 'setStringSetting()' key:${key} value:${value}"
     addEvent(["setStringSetting", key, value, "cmd=setStringSetting&key=${key}&value=${URLEncoder.encode(value, "UTF-8")}"])
     nextRefresh ?: runIn(nextRefresh, fetchSettings)
 }
 
 def setBooleanSetting(String key, String value, nextRefresh=1) {
+    logDebug "Executing 'setBooleanSetting()' key:${key} value:${value}"
     addEvent(["setBooleanSetting", key, value, "cmd=setBooleanSetting&key=${key}&value=${URLEncoder.encode(value, "UTF-8")}"])
     nextRefresh ?: runIn(nextRefresh, fetchSettings)
 }
@@ -500,7 +508,7 @@ def parse(String description) {
     }    
 
     runIn(20, clrEvents) // watchdog: needs to be less then settings.devicePollRateSecs
-    sendPostCmd()
+    runIn(0, sendPostCmd) // Hubitat is too fast. Need a delay for the queue to work.
 }
 
 def parseImageSmartThings(String description) {
