@@ -25,7 +25,7 @@ import groovy.json.*
 import java.net.URLEncoder
 
 private getVersionNum()   { return "1.0.01" }
-private getVersionLabel() { return "Fully Kiosk Browser Device, version ${versionNum}" }
+private getVersionLabel() { return "Fully Kiosk Browser Device, version ${getVersionNum()}" }
 
 Boolean isST() { return (getPlatform() == "SmartThings") }
 
@@ -399,15 +399,19 @@ def addEvent(event) {
     eventList << [type:event[0], key:event[1], value:event[2], postCmd:event[3], sequence:state.counter]
     logTrace "Event list is: ${state.eventList}"
     runIn(20, clrEvents) // watchdog: needs to be less then settings.devicePollRateSecs
-    if (state.eventListRunning==false)
-    sendPostCmd()
+    if (state.eventListRunning==false) {
+        //unschedule(clrEvents)
+        unschedule(runPostCmd)
+        sendPostCmdDelay()
+    }
     return true
 }
 
 def pullEvent() {
+    state.eventListRunning=true
     def eventList = state.eventList    
     if (eventList.size() == 0) {
-        state.eventListRunning==false
+        state.eventListRunning=false
         return
     }
     def event = eventList[0]
@@ -417,14 +421,23 @@ def pullEvent() {
 }
 
 def peakEvent() {
+    state.eventListRunning=true
     def eventList = state.eventList    
     if (eventList.size() == 0) {
-        state.eventListRunning==false
+        state.eventListRunning=false
         return
     }
     def event = eventList[0]
     logTrace "Event list is: ${state.eventList} after peaking: ${event}"    
     return event
+}
+
+def sendPostCmdDelay()
+{
+    if (isST())
+    	runIn(0, sendPostCmd)
+    else
+        runInMillis(200, sendPostCmd) // Hubitat is actually faster.
 }
 
 def runPostCmd() {
@@ -435,8 +448,7 @@ def runPostCmd() {
     sendPostCmd()
 }
 
-def sendPostCmd() {
-    state.eventListRunning==true
+def sendPostCmd() {    
     def event = peakEvent()
     // have I seen this event already?
     if (event && state.txCounter!=event.sequence) {
@@ -450,9 +462,9 @@ def sendPostCmd() {
         logDebug "tx: ${state.txCounter} :: (${cmd})"
 
         if (device.currentValue("status") != "offline")
-        runIn(30, setOffline)
+            runIn(30, setOffline)
         if (settings.deviceIp!=null && settings.devicePort!=null)
-        setupNetworkID() // leave it here.
+            setupNetworkID() // leave it here.
 
         def hubAction 	
         try {
@@ -507,8 +519,8 @@ def parse(String description) {
         pullEvent()
     }    
 
-    runIn(20, clrEvents) // watchdog: needs to be less then settings.devicePollRateSecs
-    runIn(0, sendPostCmd) // Hubitat is too fast. Need a delay for the queue to work.
+    runIn(20, clrEvents)  // watchdog: needs to be less then settings.devicePollRateSecs
+    sendPostCmdDelay()
 }
 
 def parseImageSmartThings(String description) {
@@ -568,12 +580,11 @@ def parseImageHubitat(response) {
     }
 
     runIn(20, clrEvents) // watchdog: needs to be less then settings.devicePollRateSecs
-    sendPostCmd()
+    sendPostCmdDelay()
 }
 
 def decodePostResponse(body) {
     logDebug "Executing 'decodePostResponse()'"
-
     def event = pullEvent()
     state.rxCounter=state.rxCounter+1
 
@@ -648,8 +659,9 @@ def decodePostResponse(body) {
                 // i contacted fully support to ask about a generic code reply or sequence_id to validate because handling weird return calls
                 // are ackward. they told me it was too difficult and they didnt understand why i needed them. oh well. 
                 logDebug "statustext: '${body.statustext}' from event: ${event.type}:${event.key}"
-            break;
+            break;            
         }
+        logInfo "${device.displayName} ${body.statustext}" 
     }
     else {
         logError "unhandled event: ${event} with reponse:'${body}'"
