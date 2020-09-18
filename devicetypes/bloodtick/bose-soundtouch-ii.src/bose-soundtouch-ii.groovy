@@ -17,13 +17,14 @@
 *  Date: 2020-09-13
 *
 *  1.0.00 2020-09-13 First release to support Hubitat. Ported from old SmartThings base code. Probably very buggy.
+*  1.0.01 2020-09-17 Added trackData to support SharpTools cover art images
 *
 */
 
 import groovy.json.*
 import groovy.xml.XmlUtil
 
-private getVersionNum()   { return "1.0.00" }
+private getVersionNum()   { return "1.0.01" }
 private getVersionLabel() { return "Bose SoundTouch II, version ${getVersionNum()}" }
 
 Boolean isST() { return (getPlatform() == "SmartThings") }
@@ -48,16 +49,23 @@ metadata {
         command "preset6"
         command "aux"
         
-        attribute "preset1", "string"
-        attribute "preset2", "string"
-        attribute "preset3", "string"
-        attribute "preset4", "string"
-        attribute "preset5", "string"
-        attribute "preset6", "string"
+        attribute "preset1", "JSON_OBJECT"
+        attribute "preset2", "JSON_OBJECT"
+        attribute "preset3", "JSON_OBJECT"
+        attribute "preset4", "JSON_OBJECT"
+        attribute "preset5", "JSON_OBJECT"
+        attribute "preset6", "JSON_OBJECT"
         
-        attribute "manufacturer", "string"
-        attribute "model", "string"
-        attribute "deviceID", "string"
+        attribute "info", "JSON_OBJECT"
+        
+        attribute "trackData", "JSON_OBJECT"  //added for sharptools
+        attribute "trackStation", "string"    //active station        
+        attribute "station1", "string"        //preset information for ST
+        attribute "station2", "string"
+        attribute "station3", "string"
+        attribute "station4", "string"
+        attribute "station5", "string"
+        attribute "station6", "string"
 
         //command "everywhereJoin"
         //command "everywhereLeave"
@@ -168,9 +176,9 @@ def initialize() {
     logDebug "Executing 'initialize()'"
     unschedule()
     if (device?.hub?.hardwareID ) {
-        sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "lan", scheme: "untracked", hubHardwareId: device.hub.hardwareID]), displayed: false, isStateChange: true)
-        sendEvent(name: "checkInterval", value: 1920, data: [protocol: "lan", hubHardwareId: device.hub.hardwareID], displayed: false)
-        sendEvent(name: "DeviceWatch-DeviceStatus", value: "online", displayed: false)
+        sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "lan", scheme: "untracked", hubHardwareId: device.hub.hardwareID]), display: false, displayed: false, isStateChange: true)
+        sendEvent(name: "checkInterval", value: 1920, data: [protocol: "lan", hubHardwareId: device.hub.hardwareID], display: false, displayed: false)
+        sendEvent(name: "DeviceWatch-DeviceStatus", value: "online", display: false, displayed: false)
     } else {
         logInfo "This device is not assigned to a SmartThings Hub"
     }
@@ -502,12 +510,15 @@ def boseParseVolume(xmlData) {
 def boseParseInfo(xmlData) {
     logTrace "boseParseInfo(${xmlData})"
     
-    def model = xmlData.type.text()    
-    def name = xmlData.name.text()
+    def info = [:]
     
-    sendEvent(name:"manufacturer", value: "Bose")
-    if(model) sendEvent(name:"model", value: model)
-    if(name) sendEvent(name:"name", value: name)
+    info['manufacturer'] = "Bose"
+    info['type'] = xmlData.type.text()    
+    info['name'] = xmlData.name.text()
+    info['deviceID'] = xmlData.@deviceID.text()
+    
+    logDebug "info: ${info}"
+    sendEvent(name:"info", value: JsonOutput.toJson(info))
 }
 
 /**
@@ -546,7 +557,7 @@ def boseParsePresets(xmlData) {
         item['imageUrl'] = imageUrl        
 
         sendEvent(name:"station${id}", value: name)
-        sendEvent(name:"preset${id}", value: item)
+        sendEvent(name:"preset${id}", value: JsonOutput.toJson(item))
         missing = missing.findAll { it -> it != id }
         // Store the presets into the state for recall later
         state.preset["$id"] = XmlUtil.serialize(preset.ContentItem)
@@ -637,8 +648,8 @@ def boseSetPlayerAttributes(xmlData) {
     def trackDesc = "Standby"
     def trackData = [:]
 
-    trackData["source"] = xmlData.attributes()['source']
-    trackData["sourceAccount"] = xmlData.attributes()['sourceAccount']
+    trackData["mediaSource"] = xmlData.@source.text()
+    trackData["sourceAccount"] = xmlData.@sourceAccount.text()
 
     switch (xmlData.attributes()['source']) {
         case "PRODUCT":
@@ -652,7 +663,7 @@ def boseSetPlayerAttributes(xmlData) {
             break
         case "AIRPLAY":
             trackData["station"] = trackDesc = "AirPlay"
-            if (!xmlData.attributes()['sourceAccount'].contains("AirPlay2"))
+            if (!trackData.sourceAccount.contains("AirPlay2"))
                 break
         case "SPOTIFY":
         case "DEEZER":
@@ -662,22 +673,26 @@ def boseSetPlayerAttributes(xmlData) {
         case "AMAZON":
         case "SIRIUSXM_EVEREST":
             trackData["artist"]  = xmlData.artist ? "${xmlData.artist.text()}" : ""
-            trackData["track"]   = xmlData.track  ? "${xmlData.track.text()}"  : ""
-            trackData["station"] = xmlData.stationName ? "${xmlData.stationName.text()}" : xmlData.attributes()['source']
+            trackData["title"]   = xmlData.track  ? "${xmlData.track.text()}"  : ""
+            trackData["station"] = xmlData.stationName ? "${xmlData.stationName.text()}" : trackData.mediaSource
             trackData["album"]   = xmlData.album ? "${xmlData.album.text()}" : ""
-            trackDesc = trackData.artist + ": " + trackData.track 
+            trackData["albumArtUrl"]   = xmlData.art && xmlData.art.@artImageStatus.text()=="IMAGE_PRESENT" ? "${xmlData.art.text()}" : "${xmlData.ContentItem.containerArt.text()}"
+            trackDesc = trackData.artist + ": " + trackData.title 
             break
         case "INTERNET_RADIO":
-            trackData["station"] = xmlData.stationName ? "${xmlData.stationName.text()}" : xmlData.attributes()['source']
+            trackData["station"] = xmlData.stationName ? "${xmlData.stationName.text()}" : trackData.mediaSource
             trackData["description"]  = xmlData.description ? "${xmlData.description.text()}" : ""
             trackDesc = trackData.station + ": " + trackData.description
             break
         default:
-            trackDesc = trackData.source
+            trackData["station"] = trackDesc = trackData.mediaSource
     }
 
     logDebug "trackData: ${trackData}"
-    sendEvent(name:"trackDescription", value: trackDesc, descriptionText: trackData)
+    sendEvent(name:"trackStation", value: trackData.station, display: false, displayed: false)
+    sendEvent(name:"trackDescription", value: trackDesc, display: false, displayed: false)
+    sendEvent(name:"trackData", value: JsonOutput.toJson(trackData), display: false, displayed: false)
+    
 }
 
 /**
