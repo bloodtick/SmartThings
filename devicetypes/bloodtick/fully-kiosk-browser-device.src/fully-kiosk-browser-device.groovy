@@ -18,13 +18,15 @@
 *
 *  1.0.00 2020-09-07 First release to support Hubitat. Must have Fully 1.40.3 or greater to use becuase of new command struture.
 *  1.0.01 2020-09-08 Added runIn delay in parse for sendPostCmd
+*  1.1.00 2020-09-26 Added alarm, chime and playsounds at request. Updates include preferences for three streams. Only tested on Fire HD 8.
 *
+*. NOTE: To use on Hubitat enviroment you need to comment out carouselTile() in the metadata area around line 115+
 */
 
 import groovy.json.*
 import java.net.URLEncoder
 
-private getVersionNum()   { return "1.0.01" }
+private getVersionNum()   { return "1.1.00" }
 private getVersionLabel() { return "Fully Kiosk Browser Device, version ${getVersionNum()}" }
 
 Boolean isST() { return (getPlatform() == "SmartThings") }
@@ -39,14 +41,15 @@ metadata {
         capability "Health Check"
         capability "Battery"
         capability "Speech Synthesis"
+        capability "ImageCapture"     
         capability "Image Capture"
         capability "Touch Sensor"
         capability "Motion Sensor"
+        capability "Tone"
+        capability "Alarm"
 
-        attribute "deviceInfo", "string"
-        attribute "deviceSettings", "string"
         attribute "wifiSignalLevel", "number"
-        attribute "speechVolume", "number"
+        attribute "volume", "number"
         attribute "screen", "string"
         attribute "screensaver", "string"
         attribute "currentPage", "string"
@@ -69,8 +72,9 @@ metadata {
         command "fetchInfo"
         command "loadStartURL"
         command "loadURL", ["string"]
-        command "setVolumeAndSpeak", ["number", "string", "number"]
+        command "setVolumeAndSpeak", ["number", "string"]
         command "setSpeechVolume", ["number", "number"]
+        command "setVolume", ["number", "number"]
         command "setScreenBrightness", ["number"]
         command "setScreensaverTimeout", ["number"]
         command "setStringSetting", ["string", "string"]
@@ -78,11 +82,19 @@ metadata {
         command "getStringSetting", ["string", "string"]
         command "getBooleanSetting", ["string", "string"]
         command "sendGenericCommand", ["string"]
-        command "speachTestAction"
+        command "speechTestAction"
         command "speechVolumeUpdate"
         command "getCamshot"
         command "getScreenshot"
         command "fetchImageS3", ["string"]
+        command "chime"
+		command "alarm"
+		command "playSound",["string"]
+		command "stopSound"
+        command "alarmOff"
+        command "setMediaVolume",["string"]
+        command "setAlarmVolume",["string"]
+        command "setNotifyVolume",["string"]
     }
 
     // simulator metadata
@@ -138,9 +150,9 @@ metadata {
             state "off", label: 'Screen Off', action: "screenOn", icon: "st.switches.switch.off", backgroundColor: "#ffffff"/*, nextState:"on"*/
         }        
         standardTile("speechTest", "device.switch", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
-            state "default", label:'Speak Test', action:"speachTestAction", icon:"https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/speaker-grey.png"
+            state "default", label:'Speak Test', action:"speechTestAction", icon:"https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/speaker-grey.png"
         }        
-        controlTile("speechVolume", "device.speechVolume", "slider", inactiveLabel: false, height: 1, width: 1, range:"(0..100)") {
+        controlTile("speechVolume", "device.volume", "slider", inactiveLabel: false, height: 1, width: 1, range:"(0..100)") {
             state "default", label:'${currentValue}', action:"speechVolumeUpdate"
         }        
         standardTile("refresh", "device.switch", inactiveLabel: false, height: 1, width: 2, decoration: "flat") {
@@ -154,11 +166,20 @@ metadata {
         }
         standardTile("screenshot", "device.image", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
             state "default", label:'Screenshot', action:"getScreenshot", icon:"st.motion.acceleration.inactive"
-        }        
+        }
+        standardTile("alarm", "device.alarm", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
+            state "default", label:'Alarm On', action:"alarm", icon:"st.custom.sonos.unmuted"
+        }
+        standardTile("alarmOff", "device.alarm", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
+            state "default", label:'Alarm Off', action:"alarmOff", icon:"st.custom.sonos.muted"
+        }
+        standardTile("chime", "device.chime", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
+            state "default", label:'Chime', action:"chime", icon:"st.Electronics.electronics13"
+        }
 
         main "switch"
         details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","cameraDetails","wifiSignalLevel","isInScreensaver",
-                 "battery","screen","screensaver","camshot","screenshot","refresh","listSettings","speechTest","speechVolume"])
+                 "battery","screen","screensaver","camshot","screenshot","refresh","speechTest","speechVolume","alarm","alarmOff","listSettings","chime"])
     }
 }
 
@@ -166,27 +187,42 @@ preferences {
     input(name:"deviceIp", type:"text", title: "Device IP Address", description: "Device IP Address", defaultValue: "127.0.0.1", required: true, displayDuringSetup: true)
     input(name:"devicePort", type:"number", title: "Device IP Port", description: "Default is port 2323", defaultValue: "2323", required: false, displayDuringSetup: true)
     input(name:"devicePassword", type:"string", title:"Fully Kiosk Browser Password", required: true, displayDuringSetup: true)
+    input(name:"deviceMediaUrl", type:"string", title:"Audio Media URL (Chime)", defaultValue:"", required:false)
+	input(name:"deviceAlarmUrl", type:"string", title:"Audio Alarm URL", defaultValue:"", required:false)
+    input(name:"deviceMediaVolume", type:"number", title:"Media Volume (Chime)", range: "0..100", defaultValue:"100", required:false)
+    input(name:"deviceAlarmVolume", type:"number", title:"Alarm Volume", range: "0..100", defaultValue:"100", required:false)
+    input(name:"deviceNotfyVolume", type:"number", title:"Notify Volume", range: "0..100", defaultValue:"75", required:false)
+    input(name:"deviceMediaStream", type:"number", title:"Media Stream (1-9, default 9)", description: "Media is 9 on Fire HD", range: "1..9", defaultValue:"9", required:false)
+    input(name:"deviceAlarmStream", type:"number", title:"Alarm Stream (1-9, default 9)", description: "Alarm is 4 on Fire HD, but use 9 with FKB", range: "1..9", defaultValue:"9", required:false)
+    input(name:"deviceNotfyStream", type:"number", title:"Notify Stream (1-9, default 9)", description: "Notify is 2 on Fire HD, but use 9 with FKB", range: "1..9", defaultValue:"9", required:false)
     input(name:"deviceAllowScreenOff", type: "bool", title: "Allow Screen Off Command", description: "Diverts screen off and on commands to screensaver on and off commands. Defaulted to off for Fire tablets", defaultValue: "false", displayDuringSetup: false)
     input(name:"devicePollRateSecs", type: "number", title: "Device Poll Rate (30-600 seconds)", description: "Default is 300 seconds", range: "30..600", defaultValue: "300", displayDuringSetup: false)
     input(name:"deviceS3url", type:"string", title:"AWS Lambda URL (optional)", required: false, displayDuringSetup: false)
     input(name:"deviceS3key", type:"string", title:"AWS Lambda X-Api-Key (if required)", required: false, displayDuringSetup: false)
     input(name:"deviceS3ret", type: "bool", title: "AWS Image Query", description: "Query AWS and fetch image into Smartthings Interface", defaultValue: "false", displayDuringSetup: false)
-    input(name:"deviceStoreDeviceConfig", type: "bool", title: "Debug: Display Configuration Information", description: "Store and display configuration information in Device Handler Attributes", defaultValue: "false", displayDuringSetup: false)
     input(name:"deviceLogEnable", type: "bool", title: "Enable debug logging", defaultValue: false) 
+    input(name:"deviceTraceEnable", type: "bool", title: "Enable trace logging", defaultValue: false)
 }
 
 def installed() {
     settings.devicePort = "127.0.0.1"
     settings.devicePort = 2323
+    settings.deviceMediaUrl =""
+    settings.deviceAlarmUrl =""
+    settings.deviceMediaVolume = 100
+    settings.deviceAlarmVolume = 100
+    settings.deviceNotfyVolume = 75
+    settings.deviceMediaStream = 9
+    settings.deviceAlarmStream = 9 // this is actually 4, but FKB on Fire HD is using 9
+    settings.deviceNotfyStream = 9 // this is actually 2, but FKB on Fire HD is using 9
     settings.deviceAllowScreenOff = false
     settings.devicePollRateSecs = 300
-    settings.deviceStoreDeviceConfig = false
     settings.deviceS3url =""
     settings.deviceS3key =""
     settings.deviceS3ret = false
     settings.deviceLogEnable = false
+    settings.deviceTraceEnable = false
     sendEvent(name: "level", value: "50", displayed: false)
-    sendEvent(name: "speechVolume", value: "50", displayed: false)
     logDebug "Executing 'installed()' with settings: ${settings}"
     initialize()
 }
@@ -201,6 +237,7 @@ def initialize() {
     unschedule()
     sendEvent(name: "switch", value: "off", displayed: false)
     sendEvent(name: "battery", value: "100", displayed: false)
+    speechVolumeUpdate(settings.deviceNotfyVolume)
     setS3url( settings.deviceS3url )
     setS3key( settings.deviceS3key )
 
@@ -234,6 +271,10 @@ def on() {
 
 def off() {
     screenOff()
+    if(state?.alarm==true) { 
+        AlarmOff()
+        state.alarm=false
+    }
 }
 
 def setLevel(level) {
@@ -251,8 +292,8 @@ def setScreenBrightness(level) {
     setStringSetting("screenBrightness", "${value}")
 }
 
-def speachTestAction() {
-    setVolumeAndSpeak(device.currentValue("speechVolume").toInteger(), "Fully Kiosk Browser Speaking Test")
+def speechTestAction() {
+    setVolumeAndSpeak(device.currentValue("volume").toInteger(), "Fully Kiosk Browser Speaking Test")
 }
 
 def getCamshot() {
@@ -273,12 +314,14 @@ def getScreenshot() {
 }
 
 def speechVolumeUpdate(level) {
-    sendEvent(name: "speechVolume", value: "${level}", descriptionText: "Audio Level is ${level}")
+    sendEvent(name: "volume", value: "${level}", descriptionText: "Audio Level is ${level}")
 }
 
-def setVolumeAndSpeak(level, text, stream=9) {
-    setSpeechVolume(level)
+def setVolumeAndSpeak(level, text) {
+    setNotifyVolume(level)
     speak(text)
+    if(restore!=level) 
+    	runIn(5, "setNotifyVolume")
 }
 
 def setScreensaverTimeout(value) {
@@ -327,13 +370,73 @@ def loadURL(String value) {
     addEvent(["command", "loadURL", null, "cmd=loadURL&url=${value}"])
 }
 
-def setSpeechVolume(level, stream=9) {
-    speechVolumeUpdate(level)
+def setSpeechVolume(level, stream=settings.deviceNotfyStream) { //backward compatibility
+    setNotifyVolume(level) 
+}
+
+def setVolume(level, stream=settings.deviceNotfyStream) {
     addEvent(["command", "setAudioVolume", null, "cmd=setAudioVolume&level=${level}&stream=${stream}"])
+}
+
+def setMediaVolume(level=settings.deviceMediaVolume) {
+    setVolume(level, settings.deviceMediaStream)
+}
+
+def setAlarmVolume(level=settings.deviceAlarmVolume) {
+    setVolume(level, settings.deviceAlarmStream)
+}
+
+def setNotifyVolume(level=settings.deviceNotfyVolume) {
+    sendEvent(name: "volume", value: "${level}", descriptionText: "Audio Level is ${volume}")
+    setVolume(level, settings.deviceNotfyStream)
 }
 
 def speak(String text) { // named for smartthing capability not fully method
     addEvent(["command", "textToSpeech", "${text}", "cmd=textToSpeech&text=${URLEncoder.encode(text, "UTF-8")}"])
+}
+
+def strobe() {
+    alarm()
+}
+
+def siren() {
+    alarm()
+}
+
+def both() {
+    alarm()
+}
+
+def alarm() {
+	if(settings?.deviceAlarmUrl?.length()) {
+        setAlarmVolume()
+        state.alarm=true
+        addEvent(["command", "alarm", "${url}", "cmd=playSound&url=${settings.deviceAlarmUrl}&loop=true"])
+    } else logInfo "${device.displayName} alarm URL is not set"
+}
+
+def alarmOff() {
+    stopSound()
+}
+
+def chime() {
+    beep()
+}    
+
+def beep() {
+	if(settings?.deviceMediaUrl?.length()) {
+        setMediaVolume()
+        state.alarm=false
+        playSound(settings.deviceMediaUrl)
+    } else logInfo "${device.displayName} media URL is not set"
+}
+
+def playSound(String url) {
+    addEvent(["command", "playSound", "${url}", "cmd=playSound&url=${url}"])
+}
+
+def stopSound() {
+    addEvent(["command", "stopSound", null, "cmd=stopSound"])
 }
 
 def sendGenericCommand(value) {
@@ -615,51 +718,51 @@ def decodePostResponse(body) {
         switch (body.statustext) {
             case "Screesaver stopped": // misspelled return from Fully early versions
             case "Screensaver stopped":
-            state.deviceInfo.isInScreensaver = false
-            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
-            if(!!state.deviceInfo && !state.listSettings?.screenBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
-            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
-            break;
-            case "Switching the screen on":
-            state.deviceInfo.screenOn = true
-            logDebug "${body.statustext}"
-            break;
-            case "Screensaver started":
-            state.deviceInfo.isInScreensaver = true
-            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
-            if(!!state.deviceInfo && !state.listSettings?.screensaverBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screensaverBrightness.toInteger()
-            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
-            break;
-            case "Switching the screen off":
-            state.deviceInfo.screenOn = false
-            logDebug "${body.statustext}"
-            break;            
-            case "Saved":
-            if ( event && event.type=="setStringSetting" ) {
-                def logit = "setStringSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value}"
-                if(state.listSettings."${event.key}" instanceof Integer) {
-                    state.listSettings."${event.key}" = Integer.valueOf(event.value)
-                    logDebug "${logit} as Integer"
-                }
-                else if(state.listSettings."${event.key}" instanceof String) {
-                    state.listSettings."${event.key}" = String.valueOf(event.value)
-                    logDebug "${logit} as String"
-                }
-                else logError "${logit} was not completed"
+                state.deviceInfo.isInScreensaver = false
+                //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
+                if(!!state.deviceInfo && !state.listSettings?.screenBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
+                //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
                 break;
-            } else          	
-                if ( event && event.type=="setBooleanSetting" ) {
-                    logDebug "setBooleanSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value} as Boolean"
-                    state.listSettings."${event.key}" = Boolean.valueOf(event.value)
+            case "Switching the screen on":
+                state.deviceInfo.screenOn = true
+                logDebug "${body.statustext}"
+                break;
+            case "Screensaver started":
+                state.deviceInfo.isInScreensaver = true
+                //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
+                if(!!state.deviceInfo && !state.listSettings?.screensaverBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screensaverBrightness.toInteger()
+                //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
+                break;
+            case "Switching the screen off":
+                state.deviceInfo.screenOn = false
+                logDebug "${body.statustext}"
+                break;            
+            case "Saved":
+                if ( event && event.type=="setStringSetting" ) {
+                    def logit = "setStringSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value}"
+                    if(state.listSettings."${event.key}" instanceof Integer) {
+                        state.listSettings."${event.key}" = Integer.valueOf(event.value)
+                        logDebug "${logit} as Integer"
+                    }
+                    else if(state.listSettings."${event.key}" instanceof String) {
+                        state.listSettings."${event.key}" = String.valueOf(event.value)
+                        logDebug "${logit} as String"
+                    }
+                    else logError "${logit} was not completed"
                     break;
-                }
+                } else          	
+                    if ( event && event.type=="setBooleanSetting" ) {
+                        logDebug "setBooleanSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value} as Boolean"
+                        state.listSettings."${event.key}" = Boolean.valueOf(event.value)
+                        break;
+                    }
             case "Text To Speech Ok":
-            sendEvent(name: "info", value: "", descriptionText: "TTS: '${event.value}'", isStateChange: true)
-            default:
-                // i contacted fully support to ask about a generic code reply or sequence_id to validate because handling weird return calls
-                // are ackward. they told me it was too difficult and they didnt understand why i needed them. oh well. 
-                logDebug "statustext: '${body.statustext}' from event: ${event.type}:${event.key}"
-            break;            
+                sendEvent(name: "info", value: "", descriptionText: "TTS: '${event.value}'", isStateChange: true)
+                default:
+                    // i contacted fully support to ask about a generic code reply or sequence_id to validate because handling weird return calls
+                    // are ackward. they told me it was too difficult and they didnt understand why i needed them. oh well. 
+                    logDebug "statustext: '${body?.statustext}' from event: ${event?.type}:${event?.key}"
+                	break;            
         }
         logInfo "${device.displayName} ${body.statustext}" 
     }
@@ -707,9 +810,6 @@ def update() {
         logDebug "Screen is: ${(state.deviceInfo.screenOn?"on":"off")}"
         logDebug "Screensaver is: ${(state.deviceInfo.isInScreensaver?"on":"off")}"
         logDebug "Screensaver timeout is: ${state.listSettings.timeToScreensaverV2} seconds"
-
-        sendEvent(name: "deviceSettings", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.listSettings)).toPrettyString():"disabled"), displayed: false)
-        sendEvent(name: "deviceInfo", value: (settings.deviceStoreDeviceConfig?(new JsonBuilder(state.deviceInfo)).toPrettyString():"disabled"), displayed: false)
 
         def level = Math.round(state.deviceInfo.screenBrightness.toInteger()/2.55)
         if (device.currentValue("level") != "${level}")
@@ -856,7 +956,6 @@ private getPlatform() {
     return state?.hubPlatform
 }
 
-
 private parseDescriptionAsMap( description )
 {
     description.split(",").inject([:]) { map, param ->
@@ -867,7 +966,7 @@ private parseDescriptionAsMap( description )
 
 private logInfo(msg)  { log.info "${msg}" }
 private logDebug(msg) { if(settings?.deviceLogEnable == true) { log.debug "${msg}" } }
-private logTrace(msg) { if(settings?.deviceStoreDeviceConfig) { log.trace "${msg}" } }
+private logTrace(msg) { if(settings?.deviceTraceEnable == true) { log.trace "${msg}" } }
 private logWarn(msg)  { log.warn  "${msg}" } 
 private logError(msg) { log.error  "${msg}" }
 
