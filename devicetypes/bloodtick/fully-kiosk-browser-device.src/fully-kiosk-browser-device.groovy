@@ -19,14 +19,15 @@
 *  1.0.00 2020-09-07 First release to support Hubitat. Must have Fully 1.40.3 or greater to use becuase of new command struture.
 *  1.0.01 2020-09-08 Added runIn delay in parse for sendPostCmd
 *  1.1.00 2020-09-26 Added alarm, chime and playsounds at request. Updates include preferences for three streams. Only tested on Fire HD 8.
+*  1.1.01 2020-10-04 Corrected alarmOff in off() command,
 *
-*. NOTE: To use on Hubitat enviroment you need to comment out carouselTile() in the metadata area around line 115+
+*. NOTE: To use on Hubitat enviroment you need to comment out carouselTile() in the metadata area around line 116
 */
 
 import groovy.json.*
 import java.net.URLEncoder
 
-private getVersionNum()   { return "1.1.00" }
+private getVersionNum()   { return "1.1.01" }
 private getVersionLabel() { return "Fully Kiosk Browser Device, version ${getVersionNum()}" }
 
 Boolean isST() { return (getPlatform() == "SmartThings") }
@@ -272,7 +273,7 @@ def on() {
 def off() {
     screenOff()
     if(state?.alarm==true) { 
-        AlarmOff()
+        alarmOff()
         state.alarm=false
     }
 }
