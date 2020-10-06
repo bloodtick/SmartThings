@@ -19,15 +19,16 @@
 *  1.0.00 2020-09-07 First release to support Hubitat. Must have Fully 1.40.3 or greater to use becuase of new command struture.
 *  1.0.01 2020-09-08 Added runIn delay in parse for sendPostCmd
 *  1.1.00 2020-09-26 Added alarm, chime and playsounds at request. Updates include preferences for three streams. Only tested on Fire HD 8.
-*  1.1.01 2020-10-04 Corrected alarmOff in off() command,
+*  1.1.01 2020-10-04 Corrected alarmOff in off() command
+*  1.1.02 2020-10-06 Added else around "Image Capture" in capability
 *
-*. NOTE: To use on Hubitat enviroment you need to comment out carouselTile() in the metadata area around line 116
+*. NOTE: To use on Hubitat enviroment you need to comment out carouselTile() in the metadata area around line 119
 */
 
 import groovy.json.*
 import java.net.URLEncoder
 
-private getVersionNum()   { return "1.1.01" }
+private getVersionNum()   { return "1.1.02" }
 private getVersionLabel() { return "Fully Kiosk Browser Device, version ${getVersionNum()}" }
 
 Boolean isST() { return (getPlatform() == "SmartThings") }
@@ -42,8 +43,10 @@ metadata {
         capability "Health Check"
         capability "Battery"
         capability "Speech Synthesis"
-        capability "ImageCapture"     
-        capability "Image Capture"
+        if (isST()) 
+            capability "Image Capture"
+        else 
+            capability "ImageCapture"
         capability "Touch Sensor"
         capability "Motion Sensor"
         capability "Tone"
@@ -189,7 +192,7 @@ preferences {
     input(name:"devicePort", type:"number", title: "Device IP Port", description: "Default is port 2323", defaultValue: "2323", required: false, displayDuringSetup: true)
     input(name:"devicePassword", type:"string", title:"Fully Kiosk Browser Password", required: true, displayDuringSetup: true)
     input(name:"deviceMediaUrl", type:"string", title:"Audio Media URL (Chime)", defaultValue:"", required:false)
-	input(name:"deviceAlarmUrl", type:"string", title:"Audio Alarm URL", defaultValue:"", required:false)
+    input(name:"deviceAlarmUrl", type:"string", title:"Audio Alarm URL", defaultValue:"", required:false)
     input(name:"deviceMediaVolume", type:"number", title:"Media Volume (Chime)", range: "0..100", defaultValue:"100", required:false)
     input(name:"deviceAlarmVolume", type:"number", title:"Alarm Volume", range: "0..100", defaultValue:"100", required:false)
     input(name:"deviceNotfyVolume", type:"number", title:"Notify Volume", range: "0..100", defaultValue:"75", required:false)
