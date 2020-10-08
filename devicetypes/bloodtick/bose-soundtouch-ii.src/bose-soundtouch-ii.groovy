@@ -18,13 +18,14 @@
 *
 *  1.0.00 2020-09-13 First release to support Hubitat. Ported from old SmartThings base code. Probably very buggy.
 *  1.0.01 2020-09-17 Added trackData to support SharpTools cover art images
+*  1.1.00 2020-10-08 Added basic webSocket processing for Hubitat only based upon tomw code base.
 *
 */
 
 import groovy.json.*
 import groovy.xml.XmlUtil
 
-private getVersionNum()   { return "1.0.01" }
+private getVersionNum()   { return "1.1.00" }
 private getVersionLabel() { return "Bose SoundTouch II, version ${getVersionNum()}" }
 
 Boolean isST() { return (getPlatform() == "SmartThings") }
@@ -48,16 +49,16 @@ metadata {
         command "preset5"
         command "preset6"
         command "aux"
-        
+
         attribute "preset1", "JSON_OBJECT"
         attribute "preset2", "JSON_OBJECT"
         attribute "preset3", "JSON_OBJECT"
         attribute "preset4", "JSON_OBJECT"
         attribute "preset5", "JSON_OBJECT"
         attribute "preset6", "JSON_OBJECT"
-        
+
         attribute "info", "JSON_OBJECT"
-        
+
         attribute "trackData", "JSON_OBJECT"  //added for sharptools
         attribute "trackStation", "string"    //active station        
         attribute "station1", "string"        //preset information for ST
@@ -267,7 +268,17 @@ def parse(String event) {
         "info" : "boseParseInfo"
     ]
 
-	if (!data.header) return null
+    if (!data.header) {
+        // most likely this was a websocket callback. 
+        def xml = new XmlSlurper().parseText(event)
+
+        if((!xml?.volumeUpdated?.isEmpty()) || (!xml?.nowPlayingUpdated?.isEmpty()) || (!xml?.infoUpdated?.isEmpty()))
+        {
+            logTrace "parse() ${groovy.xml.XmlUtil.escapeXml(event)}" 
+            runIn(3, ping)
+        }
+        return null
+    }
     // Move any pending callbacks into ready state
     prepareCallbacks()
 
@@ -303,6 +314,17 @@ def parse(String event) {
 def ping() {
     logTrace("ping()")    
     onAction("ping")
+
+    if(!isST()) {
+        logDebug("Rebuild webSocket ws://${getDeviceIP()}:8080/")
+        interfaces.webSocket.close()
+        interfaces.webSocket.connect("ws://${getDeviceIP()}:8080/", headers: ["Sec-WebSocket-Protocol":"gabbo"])
+    }    
+}
+
+def webSocketStatus(String message)
+{
+    logDebug("webSocketStatus $message")
 }
 
 /**
