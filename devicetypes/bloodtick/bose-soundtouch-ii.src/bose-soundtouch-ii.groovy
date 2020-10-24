@@ -17,15 +17,16 @@
 *  Date: 2020-09-13
 *
 *  1.0.00 2020-09-13 First release to support Hubitat. Ported from old SmartThings base code. Probably very buggy.
-*  1.0.01 2020-09-17 Added trackData to support SharpTools cover art images
+*  1.0.01 2020-09-17 Added trackData to support SharpTools cover art images.
 *  1.1.00 2020-10-08 Added basic webSocket processing for Hubitat only based upon tomw code base.
+*. 1.1.01 2020-10-24 Ignore exception error on xml only when using parseLanMessage() in parse function.
 *
 */
 
 import groovy.json.*
 import groovy.xml.XmlUtil
 
-private getVersionNum()   { return "1.1.00" }
+private getVersionNum()   { return "1.1.01" }
 private getVersionLabel() { return "Bose SoundTouch II, version ${getVersionNum()}" }
 
 Boolean isST() { return (getPlatform() == "SmartThings") }
@@ -254,7 +255,14 @@ def unsupported(func) { logInfo "${device.displayName} does not support ${func}"
 *         action is desired at this point.
 */
 def parse(String event) {
-    def data = parseLanMessage(event)
+    def data = []
+    try {
+        data = parseLanMessage(event)
+    }
+    catch (Exception e) {
+        // this will fail when pure xml. ignore it.
+        logTrace "parse() exception ignored: $e"
+    }
     def actions = []
     //logDebug "parse() header:${data.header}"
     //logDebug "parse() body:${data.body}"
