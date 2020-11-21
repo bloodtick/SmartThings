@@ -21,14 +21,15 @@
 *  1.1.00 2020-09-26 Added alarm, chime and playsounds at request. Updates include preferences for three streams. Only tested on Fire HD 8.
 *  1.1.01 2020-10-04 Corrected alarmOff in off() command
 *  1.1.02 2020-10-06 Added else around "Image Capture" in capability
+*  1.1.03 2020-11-21 Added "playText" based upon https://docs.hubitat.com/index.php?title=Driver_Capability_List#AudioNotification
 *
-*. NOTE: To use on Hubitat enviroment you need to comment out carouselTile() in the metadata area around line 119
+*. NOTE: To use on Hubitat enviroment you need to comment out carouselTile() in the metadata area around line 122
 */
 
 import groovy.json.*
 import java.net.URLEncoder
 
-private getVersionNum()   { return "1.1.02" }
+private getVersionNum()   { return "1.1.03" }
 private getVersionLabel() { return "Fully Kiosk Browser Device, version ${getVersionNum()}" }
 
 Boolean isST() { return (getPlatform() == "SmartThings") }
@@ -51,6 +52,7 @@ metadata {
         capability "Motion Sensor"
         capability "Tone"
         capability "Alarm"
+        capability "AudioNotification"
 
         attribute "wifiSignalLevel", "number"
         attribute "volume", "number"
@@ -92,13 +94,14 @@ metadata {
         command "getScreenshot"
         command "fetchImageS3", ["string"]
         command "chime"
-		command "alarm"
-		command "playSound",["string"]
-		command "stopSound"
+        command "alarm"
+        command "playSound",["string"]
+        command "stopSound"
         command "alarmOff"
         command "setMediaVolume",["string"]
         command "setAlarmVolume",["string"]
         command "setNotifyVolume",["string"]
+        //command "playText",["string", "number"]
     }
 
     // simulator metadata
@@ -116,7 +119,7 @@ metadata {
             }
         }
 
-        carouselTile("cameraDetails", "device.image", width: 2, height: 2) { } // Not Compatible with Hubitat. Uncomment for SmartThings Classic UI.
+        //carouselTile("cameraDetails", "device.image", width: 2, height: 2) { } // Not Compatible with Hubitat. Uncomment for SmartThings Classic UI.
 
         valueTile("currentIP", "device.currentIP", height: 1, width: 3, decoration: "flat") {
             state "default", label:'[ Current IP ]\n${currentValue}'
@@ -317,6 +320,15 @@ def getScreenshot() {
     }
 }
 
+def playText(text, level=999)
+{
+    logDebug "Executing 'playText(${text})'"
+    if(level>=0&&level<=100)
+        setVolumeAndSpeak(level.toInteger(), text)
+    else
+        speak(text)
+}    
+
 def speechVolumeUpdate(level) {
     sendEvent(name: "volume", value: "${level}", descriptionText: "Audio Level is ${level}")
 }
@@ -324,8 +336,7 @@ def speechVolumeUpdate(level) {
 def setVolumeAndSpeak(level, text) {
     setNotifyVolume(level)
     speak(text)
-    if(restore!=level) 
-    	runIn(5, "setNotifyVolume")
+    runIn(5, "setNotifyVolume")
 }
 
 def setScreensaverTimeout(value) {
