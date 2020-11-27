@@ -22,14 +22,15 @@
 *  1.1.01 2020-10-04 Corrected alarmOff in off() command
 *  1.1.02 2020-10-06 Added else around "Image Capture" in capability
 *  1.1.03 2020-11-21 Added "playText" based upon https://docs.hubitat.com/index.php?title=Driver_Capability_List#AudioNotification
+*  1.1.04 2020-11-27 Added all commands from https://docs.hubitat.com/index.php?title=Driver_Capability_List#AudioNotification
 *
-*. NOTE: To use on Hubitat enviroment you need to comment out carouselTile() in the metadata area around line 122
+*  NOTE: To use on Hubitat enviroment you need to comment out carouselTile() in the metadata area around line 124
 */
 
 import groovy.json.*
 import java.net.URLEncoder
 
-private getVersionNum()   { return "1.1.03" }
+private getVersionNum()   { return "1.1.04" }
 private getVersionLabel() { return "Fully Kiosk Browser Device, version ${getVersionNum()}" }
 
 Boolean isST() { return (getPlatform() == "SmartThings") }
@@ -102,6 +103,7 @@ metadata {
         command "setAlarmVolume",["string"]
         command "setNotifyVolume",["string"]
         //command "playText",["string", "number"]
+        //command "playTextAndResume",["string", "number"]
     }
 
     // simulator metadata
@@ -327,7 +329,37 @@ def playText(text, level=999)
         setVolumeAndSpeak(level.toInteger(), text)
     else
         speak(text)
-}    
+}
+
+def playTextAndRestore(text, level=999)
+{
+    playText(text, level)
+}
+
+def playTextAndResume(text, level=999)
+{
+    playText(text, level)
+}
+
+def playTrack(trackuri, level=999)
+{
+    logDebug "Executing 'playTrack(${trackuri})'"
+    if(level>=0&&level<=100) {
+        setMediaVolume(level)
+        runIn(10, "setMediaVolume")
+    }
+    playSound(trackuri)
+}
+
+def playTrackAndRestore(trackuri, level=999)
+{
+    playTrack(trackuri, level)
+}
+
+def playTrackAndResume(trackuri, level=999)
+{
+    playTrack(trackuri, level)
+}
 
 def speechVolumeUpdate(level) {
     sendEvent(name: "volume", value: "${level}", descriptionText: "Audio Level is ${level}")
@@ -616,18 +648,24 @@ def parse(String description) {
         return
     }    
     def msg = parseLanMessage(description)
-    //logDebug "parsed lan msg: '${msg}'"
+    //log.debug "parsed lan msg: '${msg}'"
     if (msg?.header && msg?.body) {
         def headerString = msg.header        
         def bodyString = msg.body
-        def body = new JsonSlurper().parseText(bodyString)
+        def body = [:]
+        try {
+            body = new JsonSlurper().parseText(bodyString)
+        }
+        catch (Exception e) {
+            logTrace "parse() exception ignored: $e"
+        }
 
         if (headerString.contains("200 OK")) {
             unschedule("setOffline")
             setOnline()
             decodePostResponse(body)   
         } else {
-            logError "parse() header did not respond '200 OK': ${headerString}"
+            logTrace "parse() header did not respond '200 OK': ${headerString}"
         }       
     } else if (msg?.tempImageKey) {
         unschedule("setOffline")
