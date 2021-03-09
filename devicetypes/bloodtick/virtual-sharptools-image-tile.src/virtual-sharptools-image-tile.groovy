@@ -26,8 +26,8 @@ metadata {
     definition (name: "Virtual SharpTools Image Tile", namespace: "bloodtick", author: "Hubitat", ocfDeviceType: "oic.d.switch") {
         capability "Actuator"
         capability "Switch"
-        //capability "PushableButton"
-        //capability "DoubleTapableButton"
+        capability "PushableButton"
+        capability "DoubleTapableButton"
         capability "Momentary"
         capability "Sensor"
         capability "Relay Switch"
