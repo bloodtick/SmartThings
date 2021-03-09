@@ -19,7 +19,7 @@
     */
 import groovy.json.*
 
-    private getVersionNum()   { return "1.0.00" }
+private getVersionNum()   { return "1.0.00" }
 private getVersionLabel() { return "Virtual SharpTools Image Tile, version ${getVersionNum()}" }
 
 metadata {
