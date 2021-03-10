@@ -110,14 +110,16 @@ def updateImage(image) {
     trackData["albumArtUrl"] = image
 
     logDebug "trackData: ${trackData}"
-    sendEvent(name:"trackData", value: JsonOutput.toJson(trackData), display: false, displayed: false)
+    if(image!=null)
+        sendEvent(name:"trackData", value: JsonOutput.toJson(trackData), display: false, displayed: false)
 }
 
 def updateDescription(description) {
     def trackDesc = description
 
     logDebug "trackDescription: ${trackDesc}"
-    sendEvent(name:"trackDescription", value: trackDesc, display: false, displayed: false)        
+    if(description!=null)
+        sendEvent(name:"trackDescription", value: trackDesc, display: false, displayed: false)        
 }
 
 def on() {
