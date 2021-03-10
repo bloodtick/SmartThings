@@ -1,22 +1,22 @@
 /**
-    *  Copyright 2021 Bloodtick
-    *
-    *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
-    *  in compliance with the License. You may obtain a copy of the License at:
-    *
-    *      http://www.apache.org/licenses/LICENSE-2.0
-    *
-    *  Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
-    *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
-    *  for the specific language governing permissions and limitations under the License.
-    *
-    *  Virtual SharpTools Image Tile
-    *
-    *  Update: Bloodtick Jones
-    *  Date: 2021-03-08
-    *
-    *  1.0.00 2021-03-09 First release to support Hubitat. 
-    */
+*  Copyright 2021 Bloodtick
+*
+*  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+*  in compliance with the License. You may obtain a copy of the License at:
+*
+*      http://www.apache.org/licenses/LICENSE-2.0
+*
+*  Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
+*  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+*  for the specific language governing permissions and limitations under the License.
+*
+*  Virtual SharpTools Image Tile
+*
+*  Update: Bloodtick Jones
+*  Date: 2021-03-08
+*
+*  1.0.00 2021-03-09 First release to support Hubitat. 
+*/
 import groovy.json.*
 
 private getVersionNum()   { return "1.0.00" }
@@ -33,11 +33,14 @@ metadata {
         capability "Relay Switch"
         capability "Music Player"        
 
+        attribute "metadata1", "string" // no defined use this time
+        attribute "metadata2", "string" // no defined use this time
+        
         command "push"
         command "doubleTap"
         command "toggle"
-        command "updateImage", ["String"]
-        command "updateDescription", ["String"]
+        command "updateImage", ["string"]
+        command "updateDescription", ["string"]
     }
 }
 
@@ -66,6 +69,8 @@ preferences {
         input(name:"deviceTextDoubleTapped", type:"string", title:"Description when Tile is double tapped", defaultValue:"", required:false)
     }
 
+    input(name:"deviceMetadata1", type:"string", title:"Open metadata1 attribute for external use", defaultValue:"", required:false)
+    input(name:"deviceMetadata2", type:"string", title:"Open metadata2 attribute for external use", defaultValue:"", required:false)
     input(name:"deviceLogEnable", type: "bool", title: "Enable debug logging", defaultValue: false)
 }
 
@@ -86,7 +91,9 @@ def installed() {
 def updated() {
     logDebug "Executing 'updated()' with new preferences: ${settings}"
     sendEvent(name: "numberOfButtons", value: 1, displayed: false)
-    sendEvent(name: "status", value:"stopped", display: false, displayed: false)  // this prevents playing bars on image grapic    
+    sendEvent(name: "status", value:"stopped", display: false, displayed: false)  // this prevents playing bars on image grapic
+    sendEvent(name: "metadata1", value: settings.deviceMetadata1, displayed: false)
+    sendEvent(name: "metadata2", value: settings.deviceMetadata2, displayed: false)
     logInfo "${device.displayName} preferences saved"
     initialize()
 }
@@ -142,7 +149,7 @@ def play() {
     sendEvent(name:"pushed", value: 1, descriptionText: "${device.displayName} was pushed", isStateChange: true )
 
     if (settings.deviceTappedToggle)
-    toggle()    
+        toggle()    
     else if (settings.deviceTappedEnable) {        
         updateImage(settings.deviceImageTapped)
         updateDescription(settings.deviceTextTapped)
@@ -162,7 +169,7 @@ def nextTrack() {
     sendEvent(name:"doubleTapped", value: 1, descriptionText: "${device.displayName} was doubleTapped", isStateChange: true )
 
     if (settings.deviceDoubleTappedToggle)
-    toggle()
+        toggle()
     else if (settings.deviceDoubleTappedEnable) {
         updateImage(settings.deviceImageDoubleTapped)
         updateDescription(settings.deviceTextDoubleTapped)
@@ -172,7 +179,7 @@ def nextTrack() {
 def toggle() {
     logDebug "toggle() state"
     if(device.currentState("switch")?.value == "on")
-    off()
+        off()
     else
         on()    
 }
