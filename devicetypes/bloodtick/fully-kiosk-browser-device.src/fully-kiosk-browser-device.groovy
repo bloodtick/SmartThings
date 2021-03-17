@@ -1,5 +1,5 @@
 /**
-*  Copyright 2020 Bloodtick
+*  Copyright 2021 Bloodtick
 *
 *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
 *  in compliance with the License. You may obtain a copy of the License at:
@@ -23,14 +23,16 @@
 *  1.1.02 2020-10-06 Added else around "Image Capture" in capability
 *  1.1.03 2020-11-21 Added "playText" based upon https://docs.hubitat.com/index.php?title=Driver_Capability_List#AudioNotification
 *  1.1.04 2020-11-27 Added all commands from https://docs.hubitat.com/index.php?title=Driver_Capability_List#AudioNotification
+*  1.2.00 2021-03-17 First pass at updating for Hubitat image presentations. Removed ST Classic components.
 *
-*  NOTE: To use on Hubitat enviroment you need to comment out carouselTile() in the metadata area around line 124
+* NOTE: I am trying to not completely break this for SmartThings - but you will need to walk all preferences by hand and update
+*       becuase the default settings to not apply correctly. Given ST is dropping Groovy, I don't plan on really chasing problems.
 */
 
 import groovy.json.*
 import java.net.URLEncoder
 
-private getVersionNum()   { return "1.1.04" }
+private getVersionNum()   { return "1.2.00" }
 private getVersionLabel() { return "Fully Kiosk Browser Device, version ${getVersionNum()}" }
 
 Boolean isST() { return (getPlatform() == "SmartThings") }
@@ -46,7 +48,7 @@ metadata {
         capability "Battery"
         capability "Speech Synthesis"
         if (isST()) 
-            capability "Image Capture"
+        capability "Image Capture"
         else 
             capability "ImageCapture"
         capability "Touch Sensor"
@@ -60,7 +62,6 @@ metadata {
         attribute "screen", "string"
         attribute "screensaver", "string"
         attribute "currentPage", "string"
-        attribute "injectJsCode", "string"
         attribute "altitude", "number"
         attribute "latitude", "number"
         attribute "longitude", "number"
@@ -68,6 +69,8 @@ metadata {
         attribute "s3key", "string"
         attribute "touch", "string"
         attribute "status", "string"
+        attribute "image", "string"
+        attribute "imageAWS", "string"
 
         command "screenOn"
         command "screenOff"
@@ -105,96 +108,11 @@ metadata {
         //command "playText",["string", "number"]
         //command "playTextAndResume",["string", "number"]
     }
-
-    // simulator metadata
-    simulator {}
-
-    // UI tile definitions    
-    tiles(scale: 2) {
-        multiAttributeTile(name:"switch", type: "lighting", width: 6, height: 4, canChangeIcon: false){
-            tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
-                attributeState "on", label:'${name}', action:"switch.off", icon:"https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/tablet.png", backgroundColor:"#00a0dc", nextState:"off"
-                attributeState "off", label:'${name}', action:"switch.on", icon:"https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/tablet.png", backgroundColor:"#ffffff", nextState:"on"
-            }
-            tileAttribute ("device.level", key: "SLIDER_CONTROL") {
-                attributeState "level", action:"switch level.setLevel"
-            }
-        }
-
-        //carouselTile("cameraDetails", "device.image", width: 2, height: 2) { } // Not Compatible with Hubitat. Uncomment for SmartThings Classic UI.
-
-        valueTile("currentIP", "device.currentIP", height: 1, width: 3, decoration: "flat") {
-            state "default", label:'[ Current IP ]\n${currentValue}'
-        }
-        valueTile("lastPoll", "device.lastPoll", height: 1, width: 3, decoration: "flat") {
-            state "default", label:'[ Last Response ]\n${currentValue}'
-        }        
-        valueTile("appVersionName", "device.appVersionName", height: 1, width: 2, decoration: "flat") {
-            state "default", label:'[ App Version ]\n${currentValue}'
-        }        
-        valueTile("screenBrightness", "device.screenBrightness", height: 1, width: 2, decoration: "flat") {
-            state "default", label:'[ Brightness ]\n${currentValue}'
-        }
-        valueTile("isScreenOn", "device.isScreenOn", height: 1, width: 2, decoration: "flat") {
-            state "default", label:'[ Screen On ]\n${currentValue}'
-        }
-        valueTile("isInScreensaver", "device.isInScreensaver", height: 1, width: 2, decoration: "flat") {
-            state "default", label:'[ Screen Saver ]\n${currentValue}'
-        }
-        valueTile("battery", "device.battery", height: 1, width: 2, decoration: "flat") {
-            state "default", label:'[ Battery ]\n${currentValue}%'
-        }
-        valueTile("wifiSignalLevel", "device.wifiSignalLevel", height: 1, width: 2, decoration: "flat") {
-            state "default", label:'[ Wifi Level ]\n${currentValue}'
-        }
-        valueTile("timeToScreensaverV2", "device.timeToScreensaverV2", height: 1, width: 2, decoration: "flat") {
-            state "default", label:'[ Screen Saver ]\n${currentValue} sec'
-        }        
-        standardTile("screensaver", "device.screensaver", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
-            state "off", label: 'ScrnSaver Off', action: "startScreensaver", icon: "https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/on-blue-3x.png", backgroundColor: "#ffffff"/*, nextState:"off"*/
-            state "on", label: 'ScrnSaver On', action: "stopScreensaver", icon: "st.switches.switch.off", backgroundColor: "#ffffff"/*, nextState:"on"*/
-        }        
-        standardTile("screen", "device.screen", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
-            state "on", label: 'Screen On', action: "screenOff", icon: "https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/on-blue-3x.png", backgroundColor: "#ffffff"/*, nextState:"off"*/
-            state "off", label: 'Screen Off', action: "screenOn", icon: "st.switches.switch.off", backgroundColor: "#ffffff"/*, nextState:"on"*/
-        }        
-        standardTile("speechTest", "device.switch", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
-            state "default", label:'Speak Test', action:"speechTestAction", icon:"https://raw.githubusercontent.com/bloodtick/SmartThings/master/images/speaker-grey.png"
-        }        
-        controlTile("speechVolume", "device.volume", "slider", inactiveLabel: false, height: 1, width: 1, range:"(0..100)") {
-            state "default", label:'${currentValue}', action:"speechVolumeUpdate"
-        }        
-        standardTile("refresh", "device.switch", inactiveLabel: false, height: 1, width: 2, decoration: "flat") {
-            state "default", label:'Refresh', action:"refresh.refresh", icon:"st.secondary.refresh-icon"
-        }
-        standardTile("listSettings", "device.switch", inactiveLabel: false, height: 1, width: 2, decoration: "flat") {
-            state "default", label:'Settings', action:"fetchSettings", icon:"st.secondary.refresh-icon"
-        }
-        standardTile("camshot", "device.image", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
-            state "default", label:'Camshot', action:"take", icon:"st.camera.take-photo"
-        }
-        standardTile("screenshot", "device.image", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
-            state "default", label:'Screenshot', action:"getScreenshot", icon:"st.motion.acceleration.inactive"
-        }
-        standardTile("alarm", "device.alarm", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
-            state "default", label:'Alarm On', action:"alarm", icon:"st.custom.sonos.unmuted"
-        }
-        standardTile("alarmOff", "device.alarm", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
-            state "default", label:'Alarm Off', action:"alarmOff", icon:"st.custom.sonos.muted"
-        }
-        standardTile("chime", "device.chime", inactiveLabel: false, height: 1, width: 1, decoration: "flat") {
-            state "default", label:'Chime', action:"chime", icon:"st.Electronics.electronics13"
-        }
-
-        main "switch"
-        details(["switch","currentIP","lastPoll","appVersionName","isScreenOn","cameraDetails","wifiSignalLevel","isInScreensaver",
-                 "battery","screen","screensaver","camshot","screenshot","refresh","speechTest","speechVolume","alarm","alarmOff","listSettings","chime"])
-    }
 }
 
 preferences {
     input(name:"deviceIp", type:"text", title: "Device IP Address", description: "Device IP Address", defaultValue: "127.0.0.1", required: true, displayDuringSetup: true)
-    input(name:"devicePort", type:"number", title: "Device IP Port", description: "Default is port 2323", defaultValue: "2323", required: false, displayDuringSetup: true)
+    input(name:"devicePort", type:"number", title: "Device IP Port", description: "Default is port 2323", range: "1..65535", defaultValue: "2323", required: false, displayDuringSetup: true)
     input(name:"devicePassword", type:"string", title:"Fully Kiosk Browser Password", required: true, displayDuringSetup: true)
     input(name:"deviceMediaUrl", type:"string", title:"Audio Media URL (Chime)", defaultValue:"", required:false)
     input(name:"deviceAlarmUrl", type:"string", title:"Audio Alarm URL", defaultValue:"", required:false)
@@ -206,15 +124,15 @@ preferences {
     input(name:"deviceNotfyStream", type:"number", title:"Notify Stream (1-9, default 9)", description: "Notify is 2 on Fire HD, but use 9 with FKB", range: "1..9", defaultValue:"9", required:false)
     input(name:"deviceAllowScreenOff", type: "bool", title: "Allow Screen Off Command", description: "Diverts screen off and on commands to screensaver on and off commands. Defaulted to off for Fire tablets", defaultValue: "false", displayDuringSetup: false)
     input(name:"devicePollRateSecs", type: "number", title: "Device Poll Rate (30-600 seconds)", description: "Default is 300 seconds", range: "30..600", defaultValue: "300", displayDuringSetup: false)
-    input(name:"deviceS3url", type:"string", title:"AWS Lambda URL (optional)", required: false, displayDuringSetup: false)
-    input(name:"deviceS3key", type:"string", title:"AWS Lambda X-Api-Key (if required)", required: false, displayDuringSetup: false)
-    input(name:"deviceS3ret", type: "bool", title: "AWS Image Query", description: "Query AWS and fetch image into Smartthings Interface", defaultValue: "false", displayDuringSetup: false)
     input(name:"deviceLogEnable", type: "bool", title: "Enable debug logging", defaultValue: false) 
     input(name:"deviceTraceEnable", type: "bool", title: "Enable trace logging", defaultValue: false)
+    input(name:"deviceS3url", type:"string", title:"AWS Lambda URL (optional)", required: false, displayDuringSetup: false)
+    input(name:"deviceS3key", type:"string", title:"AWS Lambda X-Api-Key (if required)", required: false, displayDuringSetup: false)
+    input(name:"deviceS3ret", type: "bool", title: "AWS Image Query", description: "Use external public image location", defaultValue: "false", displayDuringSetup: false)
 }
 
 def installed() {
-    settings.devicePort = "127.0.0.1"
+    settings.deviceIp = "127.0.0.1"
     settings.devicePort = 2323
     settings.deviceMediaUrl =""
     settings.deviceAlarmUrl =""
@@ -307,6 +225,8 @@ def speechTestAction() {
 
 def getCamshot() {
     if (state?.listSettings?.remoteAdmin && state?.listSettings?.remoteAdminCamshot && state?.listSettings?.motionDetection) {
+        def location = "http://${settings.deviceIp}:${settings.devicePort}/?cmd=getCamshot&password=${settings.devicePassword}&time=${new Date().getTime()}"
+        sendEvent(name: "image", value: location, displayed: false)
         sendGenericCommand("getCamshot")
     } else {
         logDebug "getCamshot not configured - remoteAdmin:${state?.listSettings?.remoteAdmin} remoteAdminCamshot:${state?.listSettings?.remoteAdminCamshot} motionDetection:${state?.listSettings?.motionDetection}"
@@ -326,7 +246,7 @@ def playText(text, level=999)
 {
     logDebug "Executing 'playText(${text})'"
     if(level>=0&&level<=100)
-        setVolumeAndSpeak(level.toInteger(), text)
+    setVolumeAndSpeak(level.toInteger(), text)
     else
         speak(text)
 }
@@ -455,7 +375,7 @@ def both() {
 }
 
 def alarm() {
-	if(settings?.deviceAlarmUrl?.length()) {
+    if(settings?.deviceAlarmUrl?.length()) {
         setAlarmVolume()
         state.alarm=true
         addEvent(["command", "alarm", "${url}", "cmd=playSound&url=${settings.deviceAlarmUrl}&loop=true"])
@@ -471,7 +391,7 @@ def chime() {
 }    
 
 def beep() {
-	if(settings?.deviceMediaUrl?.length()) {
+    if(settings?.deviceMediaUrl?.length()) {
         setMediaVolume()
         state.alarm=false
         playSound(settings.deviceMediaUrl)
@@ -585,7 +505,7 @@ def peakEvent() {
 def sendPostCmdDelay()
 {
     if (isST())
-    	runIn(0, sendPostCmd)
+    runIn(0, sendPostCmd)
     else
         runInMillis(200, sendPostCmd) // Hubitat is actually faster.
 }
@@ -612,9 +532,9 @@ def sendPostCmd() {
         logDebug "tx: ${state.txCounter} :: (${cmd})"
 
         if (device.currentValue("status") != "offline")
-            runIn(30, setOffline)
+        runIn(30, setOffline)
         if (settings.deviceIp!=null && settings.devicePort!=null)
-            setupNetworkID() // leave it here.
+        setupNetworkID() // leave it here.
 
         def hubAction 	
         try {
@@ -695,7 +615,7 @@ def parseImageSmartThings(String description) {
             logInfo "${device.displayName} captured image '${strImageName}'"
             if(settings?.deviceS3url?.trim() && event.key=="getCamshot") {
                 def strBase64Image = getImage(strImageName).bytes.encodeBase64()
-                storeImageS3(strBase64Image)
+                storeImageS3(strBase64Image, ("getScreenshot" ? '.png' : '.jpg'))
             }
         } catch (Exception e) {
             logError "parseImageSmartThings() $e"
@@ -717,17 +637,11 @@ def parseImageHubitat(response) {
         setOnline()        
         try
         {
-            def strImageName = (java.util.UUID.randomUUID().toString().replaceAll('-', ''))
-            strImageName += map?.headers?.'Content-Type'.contains("image/jpeg") ? '.jpg' : '.png'
-            logDebug "rx: ${state.rxCounter} :: image name: ${strImageName}"            
-            // storeTemporaryImage( map.tempImageKey, strImageName )
-            byte[] imageBytes = parseDescriptionAsMap(response.description).body.decodeBase64()
-            logInfo "NOTICE: Image and screen shots to not work. Still need someplace to put the image with size: ${imageBytes.size()}"            
-            logInfo "${device.displayName} captured image '${strImageName}'"
-            if(settings?.deviceS3url?.trim() && event.key=="getCamshot") {
-                def strBase64Image = parseDescriptionAsMap(response.description).body
-                storeImageS3(strBase64Image)
-            }
+            def strImageType = map?.headers?.'Content-Type'.contains("image/jpeg") ? '.jpg' : '.png'
+            logDebug "rx: ${state.rxCounter} :: image type: ${strImageType}"            
+
+            def strBase64Image = parseDescriptionAsMap(response.description).body
+            storeImage(strBase64Image, strImageType)
         }
         catch( Exception e )
         {
@@ -750,7 +664,7 @@ def decodePostResponse(body) {
         if (event==null || event.type!="deviceInfo")
         logInfo "deviceInfo event was expected but was: ${event}"        
 
-        state.deviceInfo = body 
+        state.deviceInfo = body.clone() 
     }
     else if (body?.timeToScreensaverV2) {
         logDebug "rx: ${state.rxCounter} :: listSettings"
@@ -758,7 +672,7 @@ def decodePostResponse(body) {
         if (event==null || event.type!="listSettings")
         logInfo "listSettings event was expected but was: ${event}"
 
-        state.listSettings = body
+        state.listSettings = body.clone()
     }
     else if (body?.status && body?.statustext && body.status.contains("OK")) {
         logDebug "rx: ${state.rxCounter} :: ${body.statustext}"
@@ -771,51 +685,51 @@ def decodePostResponse(body) {
         switch (body.statustext) {
             case "Screesaver stopped": // misspelled return from Fully early versions
             case "Screensaver stopped":
-                state.deviceInfo.isInScreensaver = false
-                //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
-                if(!!state.deviceInfo && !state.listSettings?.screenBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
-                //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
-                break;
+            state.deviceInfo.isInScreensaver = false
+            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
+            if(!!state.deviceInfo && !state.listSettings?.screenBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screenBrightness.toInteger()
+            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screenBrightness}"
+            break;
             case "Switching the screen on":
-                state.deviceInfo.screenOn = true
-                logDebug "${body.statustext}"
-                break;
+            state.deviceInfo.screenOn = true
+            logDebug "${body.statustext}"
+            break;
             case "Screensaver started":
-                state.deviceInfo.isInScreensaver = true
-                //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
-                if(!!state.deviceInfo && !state.listSettings?.screensaverBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screensaverBrightness.toInteger()
-                //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
-                break;
+            state.deviceInfo.isInScreensaver = true
+            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
+            if(!!state.deviceInfo && !state.listSettings?.screensaverBrightness.isEmpty()) state.deviceInfo.screenBrightness = state.listSettings.screensaverBrightness.toInteger()
+            //logDebug "status: ${body.statustext}, brightness: ${state.deviceInfo.screenBrightness}, listSettings: ${state.listSettings.screensaverBrightness}"
+            break;
             case "Switching the screen off":
-                state.deviceInfo.screenOn = false
-                logDebug "${body.statustext}"
-                break;            
+            state.deviceInfo.screenOn = false
+            logDebug "${body.statustext}"
+            break;            
             case "Saved":
-                if ( event && event.type=="setStringSetting" ) {
-                    def logit = "setStringSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value}"
-                    if(state.listSettings."${event.key}" instanceof Integer) {
-                        state.listSettings."${event.key}" = Integer.valueOf(event.value)
-                        logDebug "${logit} as Integer"
-                    }
-                    else if(state.listSettings."${event.key}" instanceof String) {
-                        state.listSettings."${event.key}" = String.valueOf(event.value)
-                        logDebug "${logit} as String"
-                    }
-                    else logError "${logit} was not completed"
+            if ( event && event.type=="setStringSetting" ) {
+                def logit = "setStringSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value}"
+                if(state.listSettings."${event.key}" instanceof Integer) {
+                    state.listSettings."${event.key}" = Integer.valueOf(event.value)
+                    logDebug "${logit} as Integer"
+                }
+                else if(state.listSettings."${event.key}" instanceof String) {
+                    state.listSettings."${event.key}" = String.valueOf(event.value)
+                    logDebug "${logit} as String"
+                }
+                else logError "${logit} was not completed"
+                break;
+            } else          	
+                if ( event && event.type=="setBooleanSetting" ) {
+                    logDebug "setBooleanSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value} as Boolean"
+                    state.listSettings."${event.key}" = Boolean.valueOf(event.value)
                     break;
-                } else          	
-                    if ( event && event.type=="setBooleanSetting" ) {
-                        logDebug "setBooleanSetting ${event.key} was ${state.listSettings.get(event.key)} updating to ${event.value} as Boolean"
-                        state.listSettings."${event.key}" = Boolean.valueOf(event.value)
-                        break;
-                    }
+                }
             case "Text To Speech Ok":
-                sendEvent(name: "info", value: "", descriptionText: "TTS: '${event.value}'", isStateChange: true)
-                default:
-                    // i contacted fully support to ask about a generic code reply or sequence_id to validate because handling weird return calls
-                    // are ackward. they told me it was too difficult and they didnt understand why i needed them. oh well. 
-                    logDebug "statustext: '${body?.statustext}' from event: ${event?.type}:${event?.key}"
-                	break;            
+            sendEvent(name: "info", value: "", descriptionText: "TTS: '${event.value}'", isStateChange: true)
+            default:
+                // i contacted fully support to ask about a generic code reply or sequence_id to validate because handling weird return calls
+                // are ackward. they told me it was too difficult and they didnt understand why i needed them. oh well. 
+                logDebug "statustext: '${body?.statustext}' from event: ${event?.type}:${event?.key}"
+            break;            
         }
         logInfo "${device.displayName} ${body.statustext}" 
     }
@@ -865,10 +779,10 @@ def update() {
         logDebug "Screensaver timeout is: ${state.listSettings.timeToScreensaverV2} seconds"
 
         def level = Math.round(state.deviceInfo.screenBrightness.toInteger()/2.55)
-        if (device.currentValue("level") != "${level}")
-        sendEvent(name: "level", value: "${level}", descriptionText: "Screen Brightness is ${level}")
+        if (device.currentValue("level") != "${level}") {
+            sendEvent(name: "level", value: "${level}", descriptionText: "Screen Brightness is ${level}")
+        }
 
-        sendEvent(name: "injectJsCode", value: "${state.listSettings.injectJsCode}", displayed: false)
         sendEvent(name: "currentPage", value: "${state.deviceInfo.currentPage}", displayed: false)
         sendEvent(name: "screenBrightness", value: "${state.deviceInfo.screenBrightness}", displayed: false)
         sendEvent(name: "battery", value: "${state.deviceInfo.batteryLevel}", displayed: false)
@@ -924,7 +838,6 @@ String convertPortToHex(port) {
     return hexport
 }
 
-
 def setS3url(value) {
     settings.deviceS3url = value
     sendEvent(name: "s3url", value: value, displayed: false)
@@ -935,18 +848,31 @@ def setS3key(value) {
     sendEvent(name: "s3key", value: value, displayed: false)
 }
 
-def storeImageS3(strBase64Image) {
+def storeImage(strBase64Image, strImageType) {
+    byte[] imageBytes = strBase64Image.decodeBase64()
+    logInfo "NOTICE: Hubitat images storage is not available. Captured image was size: ${imageBytes.size()}"            
+    logInfo "${device.displayName} captured image type '${strImageType}'"    
+
+    if(settings?.deviceS3url?.trim()) {
+        def location = storeImageS3(strBase64Image, strImageType)
+        sendEvent(name: "imageAWS", value: location ? location : "", displayed: false)
+    }
+}
+
+def storeImageS3(strBase64Image, strImageType) {
     logDebug "Executing 'storeImageS3()' to ${settings.deviceS3url}"
+    def response = null
 
     def params = [
         uri: settings.deviceS3url+'/store',
         body: JsonOutput.toJson([ 
             'device': "${device.displayName}", 
-            'title': "${new Date().getTime()}.jpg", 
+            'title': "${new Date().getTime()}"+strImageType, 
             'image': "${strBase64Image}",
             'altitude': device.currentValue("altitude"),
             'latitude': device.currentValue("latitude"), 
-            'longitude': device.currentValue("longitude")
+            'longitude': device.currentValue("longitude"),
+            'public': settings.deviceS3ret
         ])
     ]
     if(settings?.deviceS3key?.trim()) { // you don't need to use x-api-key with lambda. but good idea.
@@ -958,15 +884,18 @@ def storeImageS3(strBase64Image) {
             resp.headers.each { logTrace "${it.name} : ${it.value}" }
             logTrace "response contentType: ${resp.contentType}"
             logDebug "response data: ${resp.data}"
+            logInfo "${device.displayName} stored S3 image '${resp.data.title}' at location '${resp.data.location}'"
+            response = resp.data.location;
         }
     }
     catch (e) {
         logError e
     }
+
+    return response;
 }
 
-def fetchImageS3(strImageName) {
-
+def fetchImageS3(strImageName) { // this function is no longer used. leaving for reference
     if (deviceS3ret) {
         logDebug "Executing 'fetchImageS3()' to ${settings.deviceS3url}"
 
@@ -987,8 +916,9 @@ def fetchImageS3(strImageName) {
                 logTrace "response contentType: ${resp.contentType}"
                 //logTrace "response data: ${data}"
                 if (resp?.data?.body) {
-                    storeImage(strImageName, (new ByteArrayInputStream(resp.data.body.decodeBase64())))
                     logInfo "${device.displayName} fetched S3 image '${strImageName}'"
+                    byte[] imageBytes = resp.data.body.decodeBase64()
+                    storeImage(strImageName, imageBytes)
                 }
             }
         }
