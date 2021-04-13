@@ -15,15 +15,16 @@
 *  Update: Bloodtick Jones
 *  Date: 2021-03-08
 *
-*  1.0.00 2021-03-09 First release to support Hubitat. 
-*/
+*  1.0.00 2021-03-09 First release to support Hubitat.
+*  1.1.00 2021-04-12 Added random string option
+**/
 import groovy.json.*
 
-private getVersionNum()   { return "1.0.00" }
+private getVersionNum()   { return "1.1.00" }
 private getVersionLabel() { return "Virtual SharpTools Image Tile, version ${getVersionNum()}" }
 
 metadata {
-    definition (name: "Virtual SharpTools Image Tile", namespace: "bloodtick", author: "Hubitat", ocfDeviceType: "oic.d.switch") {
+    definition (name: "Virtual SharpTools Image Tile", namespace: "bloodtick", author: "Hubitat") {
         capability "Actuator"
         capability "Switch"
         capability "PushableButton"
@@ -35,7 +36,7 @@ metadata {
 
         attribute "metadata1", "string" // no defined use this time
         attribute "metadata2", "string" // no defined use this time
-        
+
         command "push"
         command "doubleTap"
         command "toggle"
@@ -69,6 +70,7 @@ preferences {
         input(name:"deviceTextDoubleTapped", type:"string", title:"Description when Tile is double tapped", defaultValue:"", required:false)
     }
 
+    input(name:"deviceAddRandom", type: "bool", title: "Add random string to albumArtUrl to override cache", defaultValue: false)
     input(name:"deviceMetadata1", type:"string", title:"Open metadata1 attribute for external use", defaultValue:"", required:false)
     input(name:"deviceMetadata2", type:"string", title:"Open metadata2 attribute for external use", defaultValue:"", required:false)
     input(name:"deviceLogEnable", type: "bool", title: "Enable debug logging", defaultValue: false)
@@ -83,6 +85,7 @@ def installed() {
     settings.deviceTappedEnable = false
     settings.deviceDoubleTappedEnable = false
     settings.deviceLogEnable = false
+    settings.deviceAddRandom = false
     sendEvent(name: "switch", value:"off", displayed: false)    
     logDebug "Executing 'installed()' with settings: ${settings}"
     updated()
@@ -107,11 +110,11 @@ def parse(String description) {
 
 def updateImage(image) {
     def trackData = [:]
-    trackData["albumArtUrl"] = image
+    trackData["albumArtUrl"] = image + (settings.deviceAddRandom ? (image.toString().contains("?") ? "&" : "?") + "random=${new Date().getTime()}" : "")
 
     logDebug "trackData: ${trackData}"
     if(image!=null)
-        sendEvent(name:"trackData", value: JsonOutput.toJson(trackData), display: false, displayed: false)
+    sendEvent(name:"trackData", value: JsonOutput.toJson(trackData), display: false, displayed: false)
 }
 
 def updateDescription(description) {
@@ -119,7 +122,7 @@ def updateDescription(description) {
 
     logDebug "trackDescription: ${trackDesc}"
     if(description!=null)
-        sendEvent(name:"trackDescription", value: trackDesc, display: false, displayed: false)        
+    sendEvent(name:"trackDescription", value: trackDesc, display: false, displayed: false)        
 }
 
 def on() {
@@ -151,7 +154,7 @@ def play() {
     sendEvent(name:"pushed", value: 1, descriptionText: "${device.displayName} was pushed", isStateChange: true )
 
     if (settings.deviceTappedToggle)
-        toggle()    
+    toggle()    
     else if (settings.deviceTappedEnable) {        
         updateImage(settings.deviceImageTapped)
         updateDescription(settings.deviceTextTapped)
@@ -171,7 +174,7 @@ def nextTrack() {
     sendEvent(name:"doubleTapped", value: 1, descriptionText: "${device.displayName} was doubleTapped", isStateChange: true )
 
     if (settings.deviceDoubleTappedToggle)
-        toggle()
+    toggle()
     else if (settings.deviceDoubleTappedEnable) {
         updateImage(settings.deviceImageDoubleTapped)
         updateDescription(settings.deviceTextDoubleTapped)
@@ -181,7 +184,7 @@ def nextTrack() {
 def toggle() {
     logDebug "toggle() state"
     if(device.currentState("switch")?.value == "on")
-        off()
+    off()
     else
         on()    
 }
