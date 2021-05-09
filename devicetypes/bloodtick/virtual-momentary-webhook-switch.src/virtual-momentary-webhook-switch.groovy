@@ -24,6 +24,8 @@ metadata {
         capability "Refresh"
         capability "Momentary"
         capability "Sensor"
+        
+        command "sendPostCmd", ["string"]
     }
 }
 
@@ -48,7 +50,7 @@ def parse(String description) {
 
 def push() {
     if (device.currentValue("switch") != "on" && settings.cmd) {
-        sendPostCmd()
+        sendPostCmd(settings.cmd)
     }        
 
     sendEvent(name: "switch", value: "on", display: false)
@@ -74,14 +76,14 @@ def sendEventOff() {
     sendEvent(name: "switch", value: "off", display: false)
 }
 
-def sendPostCmd() {
-    logDebug "${device.displayName} executing 'sendPostCmd()' ${settings.cmd}"
+def sendPostCmd(cmd) {
+    logDebug "${device.displayName} executing 'sendPostCmd()' ${cmd}"
 
     def hubAction 	
     try {
         def param = [
             method: "POST",
-            path:  settings.cmd,
+            path: cmd,
             headers: [HOST: "${settings.deviceIp}:${settings.devicePort}"]
         ]
         hubAction = (isST()) ? physicalgraph.device.HubAction.newInstance(param) : hubitat.device.HubAction.newInstance(param)
