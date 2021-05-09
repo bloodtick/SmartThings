@@ -32,7 +32,7 @@ metadata {
 preferences {
     input(name:"deviceIp", type:"text", title: "Device IP Address", description: "Device IP Address", defaultValue: "127.0.0.1", required: true, displayDuringSetup: true)
     input(name:"devicePort", type:"number", title: "Device IP Port", description: "Default is port 2323", range: "1..65535", defaultValue: "2323", required: false, displayDuringSetup: true)
-    input(name:"cmd", type:"string", title:"API Endpoint", defaultValue:"", required:true)
+    input(name:"cmd", type:"string", title:"API Endpoint", defaultValue:"", required: false)
     input(name:"delay", type: "number", title: "Delay Switching Off", defaultValue: 2)
     input(name:"deviceLogEnable", type: "bool", title: "Enable debug logging:", defaultValue: false) 
 }
